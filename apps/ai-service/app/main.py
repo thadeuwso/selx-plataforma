@@ -12,7 +12,10 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 
+from app.gateway import router as gateway_router
+
 app = FastAPI(title="SelX AI Service", version="0.1.0")
+app.include_router(gateway_router)
 
 
 @app.get("/health")
