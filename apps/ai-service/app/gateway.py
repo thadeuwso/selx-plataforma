@@ -10,6 +10,8 @@ import re
 import time
 import uuid
 
+import httpx
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -80,14 +82,57 @@ def gerar(req: RequisicaoGerar) -> dict:
             },
         )
 
-    # 5/6. Adapters reais (OpenAI, Ollama...) entram aqui — próxima iteração.
-    raise HTTPException(
-        503,
-        {
-            "codigo": "PROVEDOR_INDISPONIVEL",
-            "mensagem": f"Adapter '{provedor}' ainda não implementado",
-            "correlation_id": correlation_id,
-            "hash_entrada": hash_entrada,
+    if provedor != "openai":
+        raise HTTPException(
+            503,
+            {"codigo": "PROVEDOR_INDISPONIVEL", "mensagem": f"Adapter '{provedor}' não implementado", "correlation_id": correlation_id},
+        )
+
+    # 5. Adapter OpenAI com retry/backoff (429/5xx)
+    chave = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    modelo = (os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip()
+    if not chave:
+        raise HTTPException(503, {"codigo": "IA_DESABILITADA", "mensagem": "OPENAI_API_KEY ausente", "correlation_id": correlation_id})
+
+    corpo = {
+        "model": modelo,
+        "max_tokens": req.orcamento_tokens,
+        "messages": [
+            {"role": "system" if m["papel"] == "system" else m["papel"], "content": m["conteudo"]}
+            for m in mensagens
+        ],
+    }
+    ultimo_erro: str | None = None
+    for tentativa in range(3):
+        if tentativa:
+            time.sleep(0.3 * tentativa)
+        try:
+            resp = httpx.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {chave}"},
+                json=corpo,
+                timeout=60,
+            )
+        except httpx.HTTPError as erro:
+            ultimo_erro = str(erro)
+            continue
+        if resp.status_code == 429 or resp.status_code >= 500:
+            ultimo_erro = f"HTTP {resp.status_code}"
+            continue
+        if resp.status_code != 200:
+            raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "detalhe": resp.text[:300], "correlation_id": correlation_id})
+        dados = resp.json()
+        conteudo = dados["choices"][0]["message"]["content"]
+        # 6. Telemetria
+        return {
+            "conteudo": conteudo,
+            "provedor": "openai",
+            "modelo": modelo,
+            "uso": dados.get("usage", {}),
             "latencia_ms": int((time.monotonic() - inicio) * 1000),
-        },
-    )
+            "hash_entrada": hash_entrada,
+            "hash_saida": hashlib.sha256(conteudo.encode()).hexdigest(),
+            "correlation_id": correlation_id,
+        }
+
+    raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "detalhe": ultimo_erro, "correlation_id": correlation_id})
