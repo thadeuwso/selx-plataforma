@@ -6,8 +6,11 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
+
+const hashToken = (jti: string) => createHash('sha256').update(jti).digest('hex');
 
 export const esquemaCadastro = z.object({
   nomeGrupo: z.string().min(2),
@@ -30,6 +33,7 @@ export interface CargaToken {
   nome: string;
   permissoes: string[];
   tipo: 'access' | 'refresh';
+  jti?: string; // identificador da sessão (apenas refresh)
 }
 
 @Injectable()
@@ -135,10 +139,27 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Refresh token inválido ou expirado');
     }
-    if (carga.tipo !== 'refresh') {
+    if (carga.tipo !== 'refresh' || !carga.jti) {
       throw new UnauthorizedException('Token informado não é um refresh token');
     }
     const codUsu = BigInt(carga.sub);
+    const codTen = BigInt(carga.ten);
+
+    // Sessão precisa existir, não estar revogada nem expirada (revogação server-side)
+    const agora = new Date();
+    const rotacionada = await this.prisma.executarNoTenant(codTen, async (tx) => {
+      const sessao = await tx.sessao.findUnique({ where: { tokenHash: hashToken(carga.jti!) } });
+      if (!sessao || sessao.dhRevog || sessao.dhExp < agora) return false;
+      await tx.sessao.update({
+        where: { codSes: sessao.codSes },
+        data: { dhRevog: agora }, // rotação: o refresh usado morre aqui
+      });
+      return true;
+    });
+    if (!rotacionada) {
+      throw new UnauthorizedException('Sessão revogada, expirada ou inexistente');
+    }
+
     const usuario = await this.prisma.admin.usuario.findFirst({
       where: { codUsu, situacao: 'ATIVO', ativo: 'S' },
     });
@@ -146,6 +167,25 @@ export class AuthService {
 
     const permissoes = await this.permissoesDoUsuario(usuario.codTen, usuario.codUsu);
     return this.emitirTokens(usuario.codUsu, usuario.codTen, usuario.nomeUsu, permissoes);
+  }
+
+  /** Logout: revoga a sessão do refresh token informado. Idempotente. */
+  async sair(refreshToken: string) {
+    let carga: CargaToken;
+    try {
+      carga = await this.jwt.verifyAsync<CargaToken>(refreshToken);
+    } catch {
+      return { ok: true }; // token inválido/expirado: nada a revogar
+    }
+    if (carga.tipo !== 'refresh' || !carga.jti) return { ok: true };
+
+    await this.prisma.executarNoTenant(BigInt(carga.ten), async (tx) => {
+      await tx.sessao.updateMany({
+        where: { tokenHash: hashToken(carga.jti!), dhRevog: null },
+        data: { dhRevog: new Date() },
+      });
+    });
+    return { ok: true };
   }
 
   private async permissoesDoUsuario(codTen: bigint, codUsu: bigint): Promise<string[]> {
@@ -169,11 +209,19 @@ export class AuthService {
     permissoes: string[],
   ) {
     const base = { sub: codUsu.toString(), ten: codTen.toString(), nome, permissoes };
-    // Refresh stateless nesta fase; revogação server-side (tabela de sessões TSXSES)
-    // está registrada como pendência no vault — modelar antes da migration 0002.
+    const jti = randomUUID();
+    const validade = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+
+    // Sessão server-side (TSXSES): permite logout, rotação e revogação (migration 0002)
+    await this.prisma.executarNoTenant(codTen, (tx) =>
+      tx.sessao.create({
+        data: { codTen, codUsu, tokenHash: hashToken(jti), dhExp: validade },
+      }),
+    );
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync({ ...base, tipo: 'access' }, { expiresIn: '15m' }),
-      this.jwt.signAsync({ ...base, tipo: 'refresh' }, { expiresIn: '7d' }),
+      this.jwt.signAsync({ ...base, tipo: 'refresh', jti }, { expiresIn: '7d' }),
     ]);
     return { accessToken, refreshToken };
   }

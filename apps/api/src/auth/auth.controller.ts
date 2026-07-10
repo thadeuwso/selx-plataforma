@@ -41,6 +41,13 @@ export class AuthController {
     return this.auth.atualizar(validar(esquemaAtualizar, corpo).refreshToken);
   }
 
+  /** Logout: revoga a sessão do refresh token (idempotente). */
+  @Publico()
+  @Post('sair')
+  sair(@Body() corpo: unknown) {
+    return this.auth.sair(validar(esquemaAtualizar, corpo).refreshToken);
+  }
+
   @Get('eu')
   eu(@Req() req: Request & { usuario: UsuarioAutenticado }) {
     return req.usuario;

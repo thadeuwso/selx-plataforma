@@ -95,6 +95,23 @@ verificar("novo access token é aceito", euNovo.status === 200);
 const refreshComAccess = await http("POST", "/auth/atualizar", { refreshToken: tokenA });
 verificar("access token não serve como refresh → 401", refreshComAccess.status === 401);
 
+// 5b. Rotação de verdade: o refresh antigo morre ao ser usado
+const reuso = await http("POST", "/auth/atualizar", { refreshToken: loginA.json?.refreshToken });
+verificar("reuso de refresh já rotacionado → 401", reuso.status === 401);
+
+// 5c. Logout revoga a sessão no servidor
+const logout = await http("POST", "/auth/sair", { refreshToken: refresh.json?.refreshToken });
+verificar("logout responde ok", logout.status === 201 && logout.json?.ok === true);
+const aposLogout = await http("POST", "/auth/atualizar", { refreshToken: refresh.json?.refreshToken });
+verificar("refresh após logout → 401 (revogação server-side)", aposLogout.status === 401);
+
+// Re-login para seguir os cenários de empresas com sessão válida
+const reLoginA = await http("POST", "/auth/login", {
+  email: `admin.a.${rodada}@teste.selx`,
+  senha: "SenhaForte@123",
+});
+const tokenA2 = reLoginA.json?.accessToken;
+
 // 6. Empresas: criar filial e listar
 const filial = await http(
   "POST",
@@ -104,11 +121,11 @@ const filial = await http(
     razaoSocial: "Alfa Filial SP LTDA",
     codEmpMatriz: cadA.json?.codEmp,
   },
-  tokenA,
+  tokenA2,
 );
 verificar("tenant A cria filial (201)", filial.status === 201 && !!filial.json?.codEmp);
 
-const listaA = await http("GET", "/empresas", null, tokenA);
+const listaA = await http("GET", "/empresas", null, tokenA2);
 verificar("tenant A lista 2 empresas (matriz+filial)", listaA.status === 200 && listaA.json?.length === 2);
 
 // 7. Isolamento multi-tenant VIA API

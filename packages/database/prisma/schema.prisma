@@ -39,6 +39,7 @@ model Tenant {
   funcHistoricos FuncionarioHistorico[]
   dependentes    Dependente[]
   logsAuditoria  LogAuditoria[]
+  sessoes        Sessao[]
 
   @@map("TSXTEN")
 }
@@ -175,13 +176,13 @@ model FuncionarioHistorico {
   @@map("TFPFUNHIS")
 }
 
-/// Dependentes do funcionário. ⚠️ Nome provisório — confirmar tabela padrão da folha Sankhya.
+/// Dependentes do funcionário (nome real do Sankhya, confirmado pelo Thadeu em 2026-07-10).
 model Dependente {
-  codDep    BigInt    @id @default(autoincrement()) @map("CODDEP")
+  codDpd BigInt    @id @default(autoincrement()) @map("CODDPD")
   codTen    BigInt    @map("CODTEN")
   codFun    BigInt    @map("CODFUN")
-  nomeDep   String    @map("NOMEDEP")
-  tipoDep   String    @map("TIPODEP")
+  nomeDpd String   @map("NOMEDPD")
+  tipoDpd String   @map("TIPODPD")
   dtNasc    DateTime? @map("DTNASC") @db.Date
   cgc       String?   @map("CGC")
   dhInc     DateTime  @default(now()) @map("DHINC")
@@ -194,7 +195,7 @@ model Dependente {
   funcionario Funcionario @relation(fields: [codFun], references: [codFun])
 
   @@index([codTen, codFun])
-  @@map("TFPDEP")
+  @@map("TFPDPD")
 }
 
 // ===== Acesso (TSIUSU espelha Sankhya; RBAC é exclusivo do SelX — família TSX) =====
@@ -217,6 +218,7 @@ model Usuario {
   tenant      Tenant         @relation(fields: [codTen], references: [codTen])
   funcionario Funcionario?   @relation(fields: [codFun], references: [codFun])
   papeis      UsuarioPapel[]
+  sessoes     Sessao[]
 
   @@unique([codTen, email])
   @@map("TSIUSU")
@@ -309,4 +311,22 @@ model LogAuditoria {
 
   @@index([codTen, nomeTab, codReg])
   @@map("TAULOG")
+}
+
+/// Sessões de autenticação — refresh tokens com revogação (logout/rotação).
+model Sessao {
+  codSes    BigInt    @id @default(autoincrement()) @map("CODSES")
+  codTen    BigInt    @map("CODTEN")
+  codUsu    BigInt    @map("CODUSU")
+  tokenHash String    @unique @map("TOKENHASH")
+  dhExp     DateTime  @map("DHEXP")
+  dhRevog   DateTime? @map("DHREVOG")
+  agente    String?   @map("AGENTE")
+  dhInc     DateTime  @default(now()) @map("DHINC")
+
+  tenant  Tenant  @relation(fields: [codTen], references: [codTen])
+  usuario Usuario @relation(fields: [codUsu], references: [codUsu])
+
+  @@index([codTen, codUsu])
+  @@map("TSXSES")
 }
