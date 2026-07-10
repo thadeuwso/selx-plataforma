@@ -1,13 +1,22 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AuthModule } from './auth/auth.module';
+import { EmpresasModule } from './empresas/empresas.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { SaudeModule } from './saude/saude.module';
 
 /**
  * Monólito modular (FOUNDATION §5): cada domínio (Core, Recrutamento,
  * Gestão de Pessoas, Benefícios, Auditoria da Folha, Analytics, Integrações)
- * entrará como um módulo Nest com fronteira explícita.
+ * entra como um módulo Nest com fronteira explícita.
  */
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), SaudeModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    AuthModule,
+    SaudeModule,
+    EmpresasModule,
+  ],
 })
 export class AppModule {}
