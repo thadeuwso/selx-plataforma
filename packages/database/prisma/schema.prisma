@@ -365,11 +365,20 @@ model Departamento {
   @@map("TFPDEP")
 }
 
-/// Projetos (nome real Sankhya; colunas mínimas — completar com print do Thadeu).
+/// Projetos (espelho do print Sankhya 2026-07-10: hierárquico, identificação+abreviatura, vigência, orçamento).
 model Projeto {
   codProj   BigInt   @id @default(autoincrement()) @map("CODPROJ")
   codTen    BigInt   @map("CODTEN")
-  descrProj String   @map("DESCRPROJ")
+  identificacao String @map("IDENTIFICACAO")
+  abreviatura   String @map("ABREVIATURA")
+  codProjPai BigInt?  @map("CODPROJPAI")
+  grau      Int      @default(1) @map("GRAU")
+  analitico String   @default("S") @map("ANALITICO") @db.Char(1)
+  dtInicio  DateTime? @map("DTINICIO") @db.Date
+  dtTermino DateTime? @map("DTTERMINO") @db.Date
+  vlrOrcado Decimal? @map("VLRORCADO") @db.Decimal(15, 2)
+  concluido String   @default("N") @map("CONCLUIDO") @db.Char(1)
+  codUsuResp BigInt? @map("CODUSURESP")
   codEmp    BigInt?  @map("CODEMP")
   codProjErp BigInt? @map("CODPROJERP")
   dhInc     DateTime @default(now()) @map("DHINC")
@@ -379,18 +388,27 @@ model Projeto {
   ativo     String   @default("S") @map("ATIVO") @db.Char(1)
 
   tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  pai          Projeto?      @relation("HierarquiaProj", fields: [codProjPai], references: [codProj])
+  filhos       Projeto[]     @relation("HierarquiaProj")
+  contratos    ContratoServico[]
   funcionarios Funcionario[]
 
   @@index([codTen])
   @@map("TCSPRJ")
 }
 
-/// Contratos de serviço (nome real Sankhya; colunas mínimas — completar com print do Thadeu).
+/// Contratos de serviço (espelho do print Sankhya 2026-07-10: vinculado a projeto, tipo, parcelas, faturamento).
 model ContratoServico {
   codContrato BigInt   @id @default(autoincrement()) @map("CODCONTRATO")
   codTen      BigInt   @map("CODTEN")
   numContrato String?  @map("NUMCONTRATO")
   descrContrato String @map("DESCRCONTRATO")
+  codProj     BigInt?  @map("CODPROJ")
+  dtTermino   DateTime? @map("DTTERMINO") @db.Date
+  tipo        String   @default("M") @map("TIPO") @db.Char(1)
+  vlrHora     Decimal? @map("VLRHORA") @db.Decimal(15, 2)
+  parcelaQtd  Int?     @map("PARCELAQTD")
+  dtRefProxFat DateTime? @map("DTREFPROXFAT") @db.Date
   codEmp      BigInt?  @map("CODEMP")
   codContratoErp BigInt? @map("CODCONTRATOERP")
   dhInc       DateTime @default(now()) @map("DHINC")
@@ -400,6 +418,7 @@ model ContratoServico {
   ativo       String   @default("S") @map("ATIVO") @db.Char(1)
 
   tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  projeto      Projeto?      @relation(fields: [codProj], references: [codProj])
   funcionarios Funcionario[]
 
   @@index([codTen])

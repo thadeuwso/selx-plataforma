@@ -264,11 +264,17 @@ const funB = await http("GET", "/funcionarios", null, tokenB);
 verificar("tenant B não vê funcionários do A (isolamento)", funB.status === 200 && funB.json?.length === 0);
 
 // 11. Projetos, contratos de serviço e dependentes
-const proj = await http("POST", "/projetos", { descrProj: "Implantação SelX" }, tokenA2);
-verificar("cria projeto (201)", proj.status === 201);
+const proj = await http("POST", "/projetos", { identificacao: "Implantação SelX", abreviatura: "IMPSELX", dtInicio: "2026-07-01", vlrOrcado: 150000 }, tokenA2);
+verificar("cria projeto (201)", proj.status === 201 && proj.json?.grau === 1);
 
-const contr = await http("POST", "/contratos-servico", { descrContrato: "Contrato Cliente X", numContrato: "CT-001" }, tokenA2);
-verificar("cria contrato de serviço (201)", contr.status === 201);
+const projFilho = await http("POST", "/projetos", { identificacao: "Fase 1", abreviatura: "IMPF1", codProjPai: proj.json?.codProj }, tokenA2);
+verificar("projeto filho herda hierarquia (grau 2)", projFilho.status === 201 && projFilho.json?.grau === 2);
+
+const contr = await http("POST", "/contratos-servico", { descrContrato: "Contrato Cliente X", numContrato: "CT-001", codProj: proj.json?.codProj, vlrHora: 180, tipo: "M" }, tokenA2);
+verificar("cria contrato vinculado a projeto (201)", contr.status === 201);
+
+const contrRuim = await http("POST", "/contratos-servico", { descrContrato: "Órfão", codProj: 999999 }, tokenA2);
+verificar("contrato com projeto inexistente → 400", contrRuim.status === 400);
 
 const dep = await http("POST", `/funcionarios/${fun.json?.codFun}/dependentes`, { nomeDpd: "João Silva", tipoDpd: "FILHO", dtNasc: "2015-03-10" }, tokenA2);
 verificar("cria dependente (201)", dep.status === 201);

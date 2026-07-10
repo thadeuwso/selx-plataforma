@@ -182,10 +182,29 @@ export class FuncionariosController {
   @Post('projetos')
   @Permissoes('core.funcionarios.editar')
   criarProjeto(@Req() req: ReqAut, @Body() corpo: unknown) {
-    const dados = validar(z.object({ descrProj: z.string().min(2), codEmp: z.coerce.bigint().optional() }), corpo);
-    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
-      tx.projeto.create({ data: { codTen: req.usuario.codTen, ...dados, codUsuInc: req.usuario.codUsu } }),
+    const dados = validar(
+      z.object({
+        identificacao: z.string().min(2),
+        abreviatura: z.string().min(1).max(20),
+        codProjPai: z.coerce.bigint().optional(),
+        codEmp: z.coerce.bigint().optional(),
+        dtInicio: z.coerce.date().optional(),
+        dtTermino: z.coerce.date().optional(),
+        vlrOrcado: z.coerce.number().positive().optional(),
+      }),
+      corpo,
     );
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      let grau = 1;
+      if (dados.codProjPai) {
+        const pai = await tx.projeto.findFirst({ where: { codProj: dados.codProjPai, ativo: 'S' } });
+        if (!pai) throw new BadRequestException('Projeto pai inexistente');
+        grau = pai.grau + 1;
+      }
+      return tx.projeto.create({
+        data: { codTen: req.usuario.codTen, ...dados, grau, codUsuInc: req.usuario.codUsu },
+      });
+    });
   }
 
   @Get('contratos-servico')
@@ -200,12 +219,27 @@ export class FuncionariosController {
   @Permissoes('core.funcionarios.editar')
   criarContrato(@Req() req: ReqAut, @Body() corpo: unknown) {
     const dados = validar(
-      z.object({ descrContrato: z.string().min(2), numContrato: z.string().optional(), codEmp: z.coerce.bigint().optional() }),
+      z.object({
+        descrContrato: z.string().min(2),
+        numContrato: z.string().optional(),
+        codProj: z.coerce.bigint().optional(),
+        codEmp: z.coerce.bigint().optional(),
+        tipo: z.string().length(1).optional(),
+        vlrHora: z.coerce.number().positive().optional(),
+        parcelaQtd: z.coerce.number().int().positive().optional(),
+        dtTermino: z.coerce.date().optional(),
+      }),
       corpo,
     );
-    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
-      tx.contratoServico.create({ data: { codTen: req.usuario.codTen, ...dados, codUsuInc: req.usuario.codUsu } }),
-    );
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      if (dados.codProj) {
+        const proj = await tx.projeto.findFirst({ where: { codProj: dados.codProj, ativo: 'S' } });
+        if (!proj) throw new BadRequestException('Projeto inexistente neste tenant');
+      }
+      return tx.contratoServico.create({
+        data: { codTen: req.usuario.codTen, ...dados, codUsuInc: req.usuario.codUsu },
+      });
+    });
   }
 
   // ===== Dependentes (TFPDPD) =====
