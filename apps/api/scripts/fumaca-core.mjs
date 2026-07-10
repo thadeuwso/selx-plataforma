@@ -263,6 +263,22 @@ verificar("histórico registra ADMISSAO", hist.status === 200 && hist.json?.[0]?
 const funB = await http("GET", "/funcionarios", null, tokenB);
 verificar("tenant B não vê funcionários do A (isolamento)", funB.status === 200 && funB.json?.length === 0);
 
+// 11. Projetos, contratos de serviço e dependentes
+const proj = await http("POST", "/projetos", { descrProj: "Implantação SelX" }, tokenA2);
+verificar("cria projeto (201)", proj.status === 201);
+
+const contr = await http("POST", "/contratos-servico", { descrContrato: "Contrato Cliente X", numContrato: "CT-001" }, tokenA2);
+verificar("cria contrato de serviço (201)", contr.status === 201);
+
+const dep = await http("POST", `/funcionarios/${fun.json?.codFun}/dependentes`, { nomeDpd: "João Silva", tipoDpd: "FILHO", dtNasc: "2015-03-10" }, tokenA2);
+verificar("cria dependente (201)", dep.status === 201);
+
+const deps = await http("GET", `/funcionarios/${fun.json?.codFun}/dependentes`, null, tokenA2);
+verificar("lista dependentes (1)", deps.status === 200 && deps.json?.length === 1);
+
+const projB = await http("GET", "/projetos", null, tokenB);
+verificar("tenant B não vê projetos do A", projB.status === 200 && projB.json?.length === 0);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

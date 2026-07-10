@@ -170,6 +170,69 @@ export class FuncionariosController {
     });
   }
 
+  // ===== Projetos (TCSPRJ) e Contratos de serviço (TCSCON) — espelhos mínimos =====
+  @Get('projetos')
+  @Permissoes('core.funcionarios.ler')
+  listarProjetos(@Req() req: ReqAut) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.projeto.findMany({ where: { ativo: 'S' }, orderBy: { codProj: 'asc' } }),
+    );
+  }
+
+  @Post('projetos')
+  @Permissoes('core.funcionarios.editar')
+  criarProjeto(@Req() req: ReqAut, @Body() corpo: unknown) {
+    const dados = validar(z.object({ descrProj: z.string().min(2), codEmp: z.coerce.bigint().optional() }), corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.projeto.create({ data: { codTen: req.usuario.codTen, ...dados, codUsuInc: req.usuario.codUsu } }),
+    );
+  }
+
+  @Get('contratos-servico')
+  @Permissoes('core.funcionarios.ler')
+  listarContratos(@Req() req: ReqAut) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.contratoServico.findMany({ where: { ativo: 'S' }, orderBy: { codContrato: 'asc' } }),
+    );
+  }
+
+  @Post('contratos-servico')
+  @Permissoes('core.funcionarios.editar')
+  criarContrato(@Req() req: ReqAut, @Body() corpo: unknown) {
+    const dados = validar(
+      z.object({ descrContrato: z.string().min(2), numContrato: z.string().optional(), codEmp: z.coerce.bigint().optional() }),
+      corpo,
+    );
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.contratoServico.create({ data: { codTen: req.usuario.codTen, ...dados, codUsuInc: req.usuario.codUsu } }),
+    );
+  }
+
+  // ===== Dependentes (TFPDPD) =====
+  @Get('funcionarios/:codFun/dependentes')
+  @Permissoes('core.funcionarios.ler')
+  listarDependentes(@Req() req: ReqAut, @Param('codFun') codFun: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.dependente.findMany({ where: { codFun: BigInt(codFun), ativo: 'S' }, orderBy: { codDpd: 'asc' } }),
+    );
+  }
+
+  @Post('funcionarios/:codFun/dependentes')
+  @Permissoes('core.funcionarios.editar')
+  criarDependente(@Req() req: ReqAut, @Param('codFun') codFun: string, @Body() corpo: unknown) {
+    const dados = validar(
+      z.object({ nomeDpd: z.string().min(2), tipoDpd: z.string().min(2), dtNasc: z.coerce.date().optional(), cgc: z.string().optional() }),
+      corpo,
+    );
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const fun = await tx.funcionario.findFirst({ where: { codFun: BigInt(codFun), ativo: 'S' } });
+      if (!fun) throw new BadRequestException('Funcionário inexistente neste tenant');
+      return tx.dependente.create({
+        data: { codTen: req.usuario.codTen, codFun: fun.codFun, ...dados, codUsuInc: req.usuario.codUsu },
+      });
+    });
+  }
+
   @Get('funcionarios/:codFun/historico')
   @Permissoes('core.funcionarios.ler')
   historico(@Req() req: ReqAut, @Param('codFun') codFun: string) {

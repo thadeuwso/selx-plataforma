@@ -39,6 +39,8 @@ model Tenant {
   funcHistoricos FuncionarioHistorico[]
   dependentes    Dependente[]
   departamentos  Departamento[]
+  projetos       Projeto[]
+  contratosServico ContratoServico[]
   logsAuditoria  LogAuditoria[]
   sessoes        Sessao[]
 
@@ -135,6 +137,8 @@ model Funcionario {
   codCar       BigInt?   @map("CODCAR")
   codCencus    BigInt?   @map("CODCENCUS")
   codDep       BigInt?   @map("CODDEP")
+  codProj      BigInt?   @map("CODPROJ")
+  codContrato  BigInt?   @map("CODCONTRATO")
   tipoContrato String    @default("CLT") @map("TIPOCONTRATO")
   vlrSal       Decimal?  @map("VLRSAL") @db.Decimal(15, 2)
   situacao     String    @default("ATIVO") @map("SITUACAO")
@@ -150,6 +154,8 @@ model Funcionario {
   cargo           Cargo?                 @relation(fields: [codCar], references: [codCar])
   centroResultado CentroResultado?       @relation(fields: [codCencus], references: [codCencus])
   departamento    Departamento?          @relation(fields: [codDep], references: [codDep])
+  projeto         Projeto?               @relation(fields: [codProj], references: [codProj])
+  contratoServico ContratoServico?       @relation(fields: [codContrato], references: [codContrato])
   usuario         Usuario?
   historicos      FuncionarioHistorico[]
   dependentes     Dependente[]
@@ -357,4 +363,45 @@ model Departamento {
 
   @@index([codTen])
   @@map("TFPDEP")
+}
+
+/// Projetos (nome real Sankhya; colunas mínimas — completar com print do Thadeu).
+model Projeto {
+  codProj   BigInt   @id @default(autoincrement()) @map("CODPROJ")
+  codTen    BigInt   @map("CODTEN")
+  descrProj String   @map("DESCRPROJ")
+  codEmp    BigInt?  @map("CODEMP")
+  codProjErp BigInt? @map("CODPROJERP")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  funcionarios Funcionario[]
+
+  @@index([codTen])
+  @@map("TCSPRJ")
+}
+
+/// Contratos de serviço (nome real Sankhya; colunas mínimas — completar com print do Thadeu).
+model ContratoServico {
+  codContrato BigInt   @id @default(autoincrement()) @map("CODCONTRATO")
+  codTen      BigInt   @map("CODTEN")
+  numContrato String?  @map("NUMCONTRATO")
+  descrContrato String @map("DESCRCONTRATO")
+  codEmp      BigInt?  @map("CODEMP")
+  codContratoErp BigInt? @map("CODCONTRATOERP")
+  dhInc       DateTime @default(now()) @map("DHINC")
+  codUsuInc   BigInt?  @map("CODUSUINC")
+  dhAlt       DateTime @updatedAt @map("DHALT")
+  codUsuAlt   BigInt?  @map("CODUSUALT")
+  ativo       String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  funcionarios Funcionario[]
+
+  @@index([codTen])
+  @@map("TCSCON")
 }
