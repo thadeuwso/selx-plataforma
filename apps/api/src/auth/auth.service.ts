@@ -188,6 +188,27 @@ export class AuthService {
     return { ok: true };
   }
 
+  /** Troca de senha do próprio usuário: exige a senha atual e revoga todas as sessões. */
+  async trocarSenha(codUsu: bigint, codTen: bigint, senhaAtual: string, senhaNova: string) {
+    const usuario = await this.prisma.admin.usuario.findFirst({ where: { codUsu } });
+    if (!usuario || !(await bcrypt.compare(senhaAtual, usuario.senha))) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+    const senhaHash = await bcrypt.hash(senhaNova, 10);
+    await this.prisma.executarNoTenant(codTen, async (tx) => {
+      await tx.usuario.update({
+        where: { codUsu },
+        data: { senha: senhaHash, codUsuAlt: codUsu },
+      });
+      // Segurança: troca de senha derruba todas as sessões ativas do usuário
+      await tx.sessao.updateMany({
+        where: { codUsu, dhRevog: null },
+        data: { dhRevog: new Date() },
+      });
+    });
+    return { ok: true };
+  }
+
   private async permissoesDoUsuario(codTen: bigint, codUsu: bigint): Promise<string[]> {
     return this.prisma.executarNoTenant(codTen, async (tx) => {
       const vinculos = await tx.usuarioPapel.findMany({

@@ -147,6 +147,77 @@ const filialInvasora = await http(
 );
 verificar("tenant B não enxerga matriz do tenant A → 400", filialInvasora.status === 400);
 
+// 8. Papéis e usuários com RBAC restrito
+const papel = await http(
+  "POST",
+  "/papeis",
+  { nomePap: "Somente Leitura", permissoes: ["core.empresas.ler"] },
+  tokenA2,
+);
+verificar("cria papel restrito (201)", papel.status === 201 && !!papel.json?.codPap);
+
+const novoUsu = await http(
+  "POST",
+  "/usuarios",
+  {
+    nomeUsu: "Leitor",
+    email: `leitor.${rodada}@teste.selx`,
+    senha: "SenhaForte@123",
+    papeis: [papel.json?.codPap],
+  },
+  tokenA2,
+);
+verificar("cria usuário com papel restrito (201)", novoUsu.status === 201);
+
+const loginLeitor = await http("POST", "/auth/login", {
+  email: `leitor.${rodada}@teste.selx`,
+  senha: "SenhaForte@123",
+});
+const tokenLeitor = loginLeitor.json?.accessToken;
+verificar("usuário restrito loga", !!tokenLeitor);
+
+const leitorLista = await http("GET", "/empresas", null, tokenLeitor);
+verificar("usuário restrito LÊ empresas (200)", leitorLista.status === 200);
+
+const leitorCria = await http(
+  "POST",
+  "/empresas",
+  { nomeFantasia: "Não Pode", razaoSocial: "Não Pode LTDA" },
+  tokenLeitor,
+);
+verificar("usuário restrito NÃO cria empresa → 403", leitorCria.status === 403);
+
+const listaUsu = await http("GET", "/usuarios", null, tokenA2);
+verificar("admin lista usuários do tenant (2)", listaUsu.status === 200 && listaUsu.json?.length === 2);
+
+// 9. Troca de senha revoga sessões
+const trocaErrada = await http(
+  "PATCH",
+  "/auth/senha",
+  { senhaAtual: "errada", senhaNova: "OutraSenha@123" },
+  tokenLeitor,
+);
+verificar("troca de senha com atual errada → 401", trocaErrada.status === 401);
+
+const troca = await http(
+  "PATCH",
+  "/auth/senha",
+  { senhaAtual: "SenhaForte@123", senhaNova: "NovaSenha@456" },
+  tokenLeitor,
+);
+verificar("troca de senha ok", troca.status === 200 && troca.json?.ok === true);
+
+const refreshPosTroca = await http("POST", "/auth/atualizar", {
+  refreshToken: loginLeitor.json?.refreshToken,
+});
+verificar("sessões revogadas após troca de senha → 401", refreshPosTroca.status === 401);
+
+const loginNovaSenha = await http("POST", "/auth/login", {
+  email: `leitor.${rodada}@teste.selx`,
+  senha: "NovaSenha@456",
+});
+verificar("login com a senha nova funciona", !!loginNovaSenha.json?.accessToken);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { AuthService, esquemaCadastro, esquemaLogin } from './auth.service';
@@ -51,5 +51,18 @@ export class AuthController {
   @Get('eu')
   eu(@Req() req: Request & { usuario: UsuarioAutenticado }) {
     return req.usuario;
+  }
+
+  /** Troca a própria senha (exige senha atual; revoga todas as sessões). */
+  @Patch('senha')
+  trocarSenha(@Req() req: Request & { usuario: UsuarioAutenticado }, @Body() corpo: unknown) {
+    const esquema = z.object({ senhaAtual: z.string().min(1), senhaNova: z.string().min(8) });
+    const dados = validar(esquema, corpo);
+    return this.auth.trocarSenha(
+      req.usuario.codUsu,
+      req.usuario.codTen,
+      dados.senhaAtual,
+      dados.senhaNova,
+    );
   }
 }
