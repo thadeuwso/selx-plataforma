@@ -1,18 +1,33 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 
 const itens = [
   { rota: "/app", rotulo: "Empresas" },
   { rota: "/app/funcionarios", rotulo: "Funcionários" },
+  { rota: "/app/organizacao", rotulo: "Organização" },
   { rota: "/app/usuarios", rotulo: "Usuários" },
 ];
 
 export default function LayoutApp({ children }: { children: ReactNode }) {
   const rota = usePathname();
   const rotear = useRouter();
+  const [tema, setTema] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const salvo = (localStorage.getItem("tema") as "light" | "dark") ?? "light";
+    setTema(salvo);
+    document.documentElement.dataset.theme = salvo;
+  }, []);
+
+  function alternarTema() {
+    const novo = tema === "light" ? "dark" : "light";
+    setTema(novo);
+    localStorage.setItem("tema", novo);
+    document.documentElement.dataset.theme = novo;
+  }
 
   async function sair() {
     await api("/auth/sair", {
@@ -69,9 +84,23 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
           <span style={{ padding: "8px 10px", opacity: 0.45, fontSize: 13 }}>Benefícios (em breve)</span>
         </nav>
         <button
-          onClick={sair}
+          onClick={alternarTema}
           style={{
             marginTop: "auto",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,.25)",
+            background: "transparent",
+            color: "#fff",
+            font: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          {tema === "light" ? "🌙 Tema escuro" : "☀️ Tema claro"}
+        </button>
+        <button
+          onClick={sair}
+          style={{
             padding: "8px 10px",
             borderRadius: 8,
             border: "1px solid rgba(255,255,255,.25)",
