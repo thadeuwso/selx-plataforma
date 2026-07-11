@@ -1,0 +1,23 @@
+KIT DE IDENTIDADE VISUAL SELX
+
+PALETA
+Off-white: #F7F2E8
+Bege: #D8C4A8
+Marrom claro: #B28A62
+Marrom: #5B3A29
+Marrom dourado: #A87832
+Marrom profundo: #2B1D15
+
+USO RECOMENDADO
+- Fundo claro: use arquivos com sufixo fundo-claro.
+- Fundo escuro: use arquivos com sufixo fundo-escuro.
+- Navegação e cabeçalho: logo horizontal sem tagline.
+- Login, capa e materiais institucionais: logo vertical ou horizontal com tagline.
+- Ícone do aplicativo/PWA: selx-app-icon nos tamanhos fornecidos.
+- Favicon: arquivos da pasta favicon.
+- SVG é o formato principal e pode ser redimensionado sem perda.
+- PNG possui fundo transparente, exceto app icons e favicons.
+
+MARGEM DE SEGURANÇA
+Mantenha ao redor da marca uma área livre equivalente à altura da letra “e”.
+Não distorça, não aplique sombras e não substitua as cores oficiais.

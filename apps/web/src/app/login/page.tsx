@@ -52,7 +52,7 @@ export default function PaginaLogin() {
         }}
       >
         <div>
-          <div style={{ fontWeight: 600, fontSize: 22, color: "var(--text-default)" }}>SelX</div>
+          <img src="/marca/SelX_Kit_Identidade/svg/selx-logo-horizontal-fundo-claro.svg" alt="SelX" style={{ height: 44, alignSelf: "start" }} />
           <div style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
             Plataforma Inteligente de Gestão de Pessoas
           </div>

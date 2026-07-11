@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="45 18 420 570" role="img" aria-label="SelX">
+<defs>
+  <linearGradient id="selxGold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#D8C4A8"/>
+    <stop offset="0.52" stop-color="#C99B5D"/>
+    <stop offset="1" stop-color="#A87832"/>
+  </linearGradient>
+  <linearGradient id="selxWarm" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#F7F2E8"/>
+    <stop offset="0.68" stop-color="#D8C4A8"/>
+    <stop offset="1" stop-color="#C99B5D"/>
+  </linearGradient>
+</defs>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M421 86 C350 28 235 28 162 82 C107 123 87 181 101 233 C105 247 101 258 93 274 L69 317 C63 328 69 337 82 339 L101 342 C108 343 111 350 106 356 L98 365 C93 371 96 378 105 381 C99 388 101 397 110 401 C105 421 115 442 134 448 C157 455 181 440 205 444 C229 448 240 467 237 489 C232 523 193 548 132 558" stroke="#F7F2E8" stroke-width="8.5"/>
+  <path d="M386 104 C326 70 220 72 171 109 C143 130 145 154 175 164 C201 173 232 166 262 181 C312 206 332 254 317 303 C307 338 281 365 270 399 C255 447 271 504 363 557" stroke="#F7F2E8" stroke-width="7.2"/>
+  <path d="M273 130 C306 139 334 148 365 151" stroke="#F7F2E8" stroke-width="2.1"/>
+  <path d="M315 144 C351 179 354 229 329 271" stroke="#F7F2E8" stroke-width="1.8" opacity=".8"/>
+  <path d="M365 151 C397 189 397 252 370 301" stroke="#F7F2E8" stroke-width="2" opacity=".88"/>
+  <circle cx="272" cy="130" r="6" fill="#F7F2E8" stroke="none"/>
+  <circle cx="315" cy="144" r="9" fill="#F7F2E8" stroke="none"/>
+  <circle cx="365" cy="151" r="8" fill="#F7F2E8" stroke="none"/>
+  <circle cx="329" cy="212" r="10" fill="#F7F2E8" stroke="none"/>
+  <circle cx="407" cy="204" r="11" fill="#F7F2E8" stroke="none"/>
+  <circle cx="386" cy="112" r="10" fill="#F7F2E8" stroke="none"/>
+</g>
+</svg>

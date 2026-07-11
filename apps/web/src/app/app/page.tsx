@@ -65,7 +65,7 @@ export default function AreaLogada() {
           gap: 16,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 18 }}>SelX</div>
+        <img src="/marca/SelX_Kit_Identidade/svg/selx-logo-horizontal-fundo-escuro.svg" alt="SelX" style={{ height: 34 }} />
         <nav style={{ display: "grid", gap: 4, fontSize: 14 }}>
           <span style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,.12)" }}>
             Empresas
