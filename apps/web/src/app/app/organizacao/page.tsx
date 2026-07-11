@@ -23,7 +23,28 @@ const caixa: React.CSSProperties = {
   overflow: "hidden",
 };
 
+function Aba({ ativa, aoClicar, children }: { ativa: boolean; aoClicar: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={aoClicar}
+      style={{
+        padding: "10px 18px",
+        border: "none",
+        borderBottom: ativa ? "2px solid var(--action-primary, var(--brand-700))" : "2px solid transparent",
+        background: "none",
+        font: "inherit",
+        fontWeight: ativa ? 600 : 400,
+        color: ativa ? "var(--text-default)" : "var(--text-muted)",
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function PaginaOrganizacao() {
+  const [aba, setAba] = useState<"departamentos" | "cargos">("departamentos");
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
   const [gaveta, setGaveta] = useState<"cargo" | "departamento" | null>(null);
@@ -68,15 +89,25 @@ export default function PaginaOrganizacao() {
   }
 
   return (
-    <main style={{ padding: 32, display: "grid", gap: 28 }}>
+    <main style={{ padding: 32, display: "grid", gap: 20, alignContent: "start" }}>
+      <header>
+        <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Organização</h1>
+        <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-default)", marginTop: 16 }}>
+          <Aba ativa={aba === "departamentos"} aoClicar={() => setAba("departamentos")}>
+            Departamentos ({departamentos.length})
+          </Aba>
+          <Aba ativa={aba === "cargos"} aoClicar={() => setAba("cargos")}>
+            Cargos ({cargos.length})
+          </Aba>
+        </div>
+      </header>
+
+      {aba === "departamentos" && (
       <section>
         <header style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Departamentos</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-              Estrutura hierárquica ({departamentos.length}) — espelho da TFPDEP do Sankhya.
-            </p>
-          </div>
+          <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
+            Estrutura hierárquica — espelho da TFPDEP do Sankhya.
+          </p>
           <BotaoPrimario onClick={() => setGaveta("departamento")}>Novo departamento</BotaoPrimario>
         </header>
         <div style={caixa}>
@@ -109,15 +140,14 @@ export default function PaginaOrganizacao() {
           </table>
         </div>
       </section>
+      )}
 
+      {aba === "cargos" && (
       <section>
         <header style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Cargos</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-              {cargos.length} cargo(s) — espelho da TFPCAR.
-            </p>
-          </div>
+          <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
+            Espelho da TFPCAR do Sankhya.
+          </p>
           <BotaoPrimario onClick={() => setGaveta("cargo")}>Novo cargo</BotaoPrimario>
         </header>
         <div style={caixa}>
@@ -148,6 +178,7 @@ export default function PaginaOrganizacao() {
           </table>
         </div>
       </section>
+      )}
 
       <Gaveta titulo="Novo departamento" aberta={gaveta === "departamento"} fechar={() => setGaveta(null)}>
         <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>
