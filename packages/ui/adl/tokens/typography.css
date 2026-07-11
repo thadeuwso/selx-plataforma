@@ -1,0 +1,46 @@
+/* ADL — Tipografia
+   IBM Plex Sans (interface) + IBM Plex Mono (dados técnicos).
+   Escala curta e disciplinada: papéis nomeados, nunca tamanhos ad hoc.
+   Peso comunica hierarquia; cor comunica estado. Algarismos tabulares em dados. */
+
+:root {
+  --font-sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Papéis (tamanho / entrelinha / peso) */
+  --type-display-size: 28px;
+  --type-display-line: 36px;
+  --type-display-weight: 600;
+
+  --type-title-size: 20px;
+  --type-title-line: 28px;
+  --type-title-weight: 600;
+
+  --type-subtitle-size: 16px;
+  --type-subtitle-line: 24px;
+  --type-subtitle-weight: 600;
+
+  --type-body-size: 14px;
+  --type-body-line: 22px;
+  --type-body-weight: 400;
+
+  --type-support-size: 13px;
+  --type-support-line: 20px;
+  --type-support-weight: 400;
+
+  --type-caption-size: 12px;
+  --type-caption-line: 16px;
+  --type-caption-weight: 400;
+
+  /* Dados tabulares (tabelas, KPIs, moeda) */
+  --type-data-size: 13px;
+  --type-data-line: 20px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Largura máxima de leitura — texto corrido nunca se estica pela tela */
+  --measure-reading: 68ch;
+}

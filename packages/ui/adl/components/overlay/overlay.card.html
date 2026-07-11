@@ -1,0 +1,53 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Sobreposição" subtitle="Modal, drawer, popover" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body { background: var(--surface-default); margin: 0; padding: 16px; }</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const DS = window.AIONDesignLanguageADL_e674b3;
+const { Modal, Drawer, Popover, Button, TextField } = DS;
+function Demo() {
+  const [modal, setModal] = React.useState(false);
+  const [drawer, setDrawer] = React.useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button variant="secondary" onClick={() => setModal(true)}>Abrir modal</Button>
+        <Button variant="secondary" onClick={() => setDrawer(true)}>Abrir drawer</Button>
+        <Popover trigger={<Button variant="secondary" icon="filter">Filtros</Button>}>
+          <TextField label="Localização" placeholder="Cidade ou estado" compact />
+        </Popover>
+      </div>
+      {/* Modal renderizado inline (estático) para o card */}
+      <div style={{ background: 'var(--surface-default)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--elevation-overlay)', border: '1px solid var(--border-subtle)', maxWidth: 440, padding: '20px 24px' }}>
+        <h2 style={{ margin: 0, fontSize: 'var(--type-title-size)', fontWeight: 600, color: 'var(--text-strong)' }}>Agendar entrevista</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Ana Souza · Analista de dados — escolha a data e quem participa.</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <Button variant="secondary" size="compact">Cancelar</Button>
+          <Button size="compact">Agendar entrevista</Button>
+        </div>
+      </div>
+      <Modal open={modal} title="Agendar entrevista" onClose={() => setModal(false)}
+        footer={<><Button variant="secondary" onClick={() => setModal(false)}>Cancelar</Button><Button onClick={() => setModal(false)}>Agendar entrevista</Button></>}>
+        <p style={{ margin: 0, color: 'var(--text-muted)' }}>Ana Souza · Analista de dados.</p>
+      </Modal>
+      <Drawer open={drawer} title="Detalhe do candidato" onClose={() => setDrawer(false)}
+        footer={<Button onClick={() => setDrawer(false)}>Mover para entrevista</Button>}>
+        <p style={{ margin: 0, color: 'var(--text-muted)' }}>Conteúdo do painel lateral.</p>
+      </Drawer>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+/* ADL — Cores
+   Arquitetura em 3 camadas: primitivos → semânticos → componente.
+   Princípios: neutros como base; marca com precisão cirúrgica; saturação contida;
+   cor é semântica; contraste calibrado; claro e escuro nascem juntos. */
+
+:root {
+  /* ── Primitivos: neutros (frios, levemente tingidos do índigo da marca) ── */
+  --neutral-0:   #FFFFFF;
+  --neutral-25:  #FBFBFC;
+  --neutral-50:  #F6F6F8;
+  --neutral-100: #EFEFF2;
+  --neutral-200: #E2E2E8;
+  --neutral-300: #CFCFD8;
+  --neutral-400: #A5A5B1;
+  --neutral-500: #7D7D8A;
+  --neutral-600: #5E5E6A;
+  --neutral-700: #484852;
+  --neutral-800: #32323B;
+  --neutral-900: #222228;
+  --neutral-950: #16161B;
+
+  /* ── Primitivos: marca (índigo profundo dessaturado) ── */
+  --brand-50:  #F0F0F6;
+  --brand-100: #E2E2ED;
+  --brand-200: #C7C7DC;
+  --brand-300: #A4A3C4;
+  --brand-400: #7C7BA4;
+  --brand-500: #5A5980;
+  --brand-600: #4A496C;
+  --brand-700: #3B3A5C;
+  --brand-800: #2E2D49;
+  --brand-900: #232238;
+  --brand-950: #17172A;
+
+  /* ── Primitivos: semânticos de estado (dessaturados, significado fixo) ── */
+  --green-50:  #EDF5F0;
+  --green-100: #D6E9DF;
+  --green-500: #2E7D5B;
+  --green-600: #256849;
+  --green-700: #1D533B;
+  --red-50:  #FAEFEE;
+  --red-100: #F3DAD8;
+  --red-500: #B4443E;
+  --red-600: #9A3833;
+  --red-700: #7E2E2A;
+  --amber-50:  #FAF3E6;
+  --amber-100: #F2E3C4;
+  --amber-500: #A8730A;
+  --amber-600: #8C6009;
+  --amber-700: #714E08;
+  --blue-50:  #EDF2F8;
+  --blue-100: #D8E3F0;
+  --blue-500: #2F6BA8;
+  --blue-600: #275989;
+  --blue-700: #1F476E;
+
+  /* ── Semânticos: superfícies ── */
+  --surface-page: var(--neutral-50);
+  --surface-default: var(--neutral-0);
+  --surface-raised: var(--neutral-0);
+  --surface-sunken: var(--neutral-100);
+  --surface-hover: var(--neutral-50);
+  --surface-pressed: var(--neutral-100);
+  --surface-selected: var(--brand-50);
+  --surface-inverse: var(--neutral-900);
+  --surface-overlay: rgba(22, 22, 27, 0.44);
+
+  /* ── Semânticos: texto ── */
+  --text-strong: var(--neutral-950);
+  --text-body: var(--neutral-800);
+  --text-muted: var(--neutral-600);
+  --text-subtle: var(--neutral-500);
+  --text-disabled: var(--neutral-400);
+  --text-inverse: var(--neutral-0);
+  --text-on-brand: #FFFFFF;
+  --text-link: var(--brand-600);
+  --text-link-hover: var(--brand-700);
+
+  /* ── Semânticos: bordas ── */
+  --border-subtle: var(--neutral-200);
+  --border-default: var(--neutral-300);
+  --border-strong: var(--neutral-400);
+  --border-selected: var(--brand-500);
+
+  /* ── Semânticos: ação ── */
+  --action-primary: var(--brand-700);
+  --action-primary-hover: var(--brand-800);
+  --action-primary-pressed: var(--brand-900);
+  --action-secondary-border: var(--neutral-300);
+  --action-secondary-hover: var(--neutral-50);
+  --action-destructive: var(--red-600);
+  --action-destructive-hover: var(--red-700);
+
+  /* ── Semânticos: feedback (significado fixo em todos os produtos) ── */
+  --feedback-success: var(--green-600);
+  --feedback-success-surface: var(--green-50);
+  --feedback-success-border: var(--green-100);
+  --feedback-danger: var(--red-600);
+  --feedback-danger-surface: var(--red-50);
+  --feedback-danger-border: var(--red-100);
+  --feedback-warning: var(--amber-600);
+  --feedback-warning-surface: var(--amber-50);
+  --feedback-warning-border: var(--amber-100);
+  --feedback-info: var(--blue-600);
+  --feedback-info-surface: var(--blue-50);
+  --feedback-info-border: var(--blue-100);
+
+  /* ── Semânticos: foco (acessibilidade — sempre visível) ── */
+  --focus-ring: 0 0 0 2px var(--surface-default), 0 0 0 4px var(--brand-500);
+
+  /* ── Acento de tenant (branding por cliente, dentro dos limites do ADL) ──
+     Produtos multi-tenant podem sobrescrever APENAS estes pontos de acento. */
+  --tenant-accent: var(--brand-700);
+  --tenant-accent-hover: var(--brand-800);
+  --tenant-accent-surface: var(--brand-50);
+  --tenant-accent-on: var(--text-on-brand);
+
+  /* ── IA: marcação sutil e consistente de conteúdo gerado por IA ── */
+  --ai-surface: var(--brand-50);
+  --ai-border: var(--brand-200);
+  --ai-text: var(--brand-700);
+}
+
+/* ── Tema escuro: mesma hierarquia, mesmo significado semântico ── */
+[data-theme="dark"] {
+  --surface-page: var(--neutral-950);
+  --surface-default: var(--neutral-900);
+  --surface-raised: var(--neutral-800);
+  --surface-sunken: #101014;
+  --surface-hover: var(--neutral-800);
+  --surface-pressed: var(--neutral-700);
+  --surface-selected: var(--brand-900);
+  --surface-inverse: var(--neutral-50);
+  --surface-overlay: rgba(0, 0, 0, 0.6);
+
+  --text-strong: var(--neutral-25);
+  --text-body: var(--neutral-100);
+  --text-muted: var(--neutral-400);
+  --text-subtle: var(--neutral-500);
+  --text-disabled: var(--neutral-600);
+  --text-inverse: var(--neutral-950);
+  --text-link: var(--brand-300);
+  --text-link-hover: var(--brand-200);
+
+  --border-subtle: var(--neutral-800);
+  --border-default: var(--neutral-700);
+  --border-strong: var(--neutral-600);
+  --border-selected: var(--brand-400);
+
+  --action-primary: var(--brand-400);
+  --action-primary-hover: var(--brand-300);
+  --action-primary-pressed: var(--brand-200);
+  --action-secondary-border: var(--neutral-700);
+  --action-secondary-hover: var(--neutral-800);
+
+  --feedback-success-surface: rgba(46, 125, 91, 0.16);
+  --feedback-success-border: rgba(46, 125, 91, 0.35);
+  --feedback-success: #5BAE8C;
+  --feedback-danger-surface: rgba(180, 68, 62, 0.16);
+  --feedback-danger-border: rgba(180, 68, 62, 0.35);
+  --feedback-danger: #D08782;
+  --feedback-warning-surface: rgba(168, 115, 10, 0.16);
+  --feedback-warning-border: rgba(168, 115, 10, 0.35);
+  --feedback-warning: #CFA14D;
+  --feedback-info-surface: rgba(47, 107, 168, 0.16);
+  --feedback-info-border: rgba(47, 107, 168, 0.35);
+  --feedback-info: #7BA7D4;
+
+  --focus-ring: 0 0 0 2px var(--surface-default), 0 0 0 4px var(--brand-400);
+
+  --tenant-accent: var(--brand-400);
+  --tenant-accent-hover: var(--brand-300);
+  --tenant-accent-surface: var(--brand-900);
+  --tenant-accent-on: var(--neutral-950);
+
+  --ai-surface: rgba(90, 89, 128, 0.18);
+  --ai-border: var(--brand-800);
+  --ai-text: var(--brand-300);
+}

@@ -1,0 +1,32 @@
+<!-- @dsCard group="Spacing" viewport="700x180" name="Elevação" subtitle="Bordas sutis > sombras · três níveis com significado fixo" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+body { margin: 0; padding: 16px; background: var(--surface-default); font-family: var(--font-sans); color: var(--text-body); }
+body { background: var(--surface-page); }
+</style>
+</head>
+<body>
+<div style="display: flex; gap: 20px; padding: 8px;">
+
+<div style="flex: 1;">
+  <div style="height: 80px; background: var(--surface-default); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); box-shadow: var(--elevation-raised);"></div>
+  <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-subtle); margin-top: 8px;">--elevation-raised</div>
+  <div style="font-size: 11px; color: var(--text-muted);">Cartão em repouso</div>
+</div>
+<div style="flex: 1;">
+  <div style="height: 80px; background: var(--surface-default); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); box-shadow: var(--elevation-floating);"></div>
+  <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-subtle); margin-top: 8px;">--elevation-floating</div>
+  <div style="font-size: 11px; color: var(--text-muted);">Popover, dropdown</div>
+</div>
+<div style="flex: 1;">
+  <div style="height: 80px; background: var(--surface-default); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); box-shadow: var(--elevation-overlay);"></div>
+  <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-subtle); margin-top: 8px;">--elevation-overlay</div>
+  <div style="font-size: 11px; color: var(--text-muted);">Modal, drawer</div>
+</div>
+</div>
+</body>
+</html>

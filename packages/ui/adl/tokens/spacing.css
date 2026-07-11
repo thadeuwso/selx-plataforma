@@ -1,0 +1,53 @@
+/* ADL — Espaço, forma, elevação e movimento
+   Unidade-base 4px. O espaço organiza antes de qualquer linha.
+   Bordas sutis preferidas a sombras fortes. Movimento é feedback, nunca espetáculo. */
+
+:root {
+  /* ── Espaço (base 4px) ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Densidade: alturas de controle ── */
+  --control-height: 36px;          /* confortável (padrão) */
+  --control-height-compact: 28px;  /* tabelas e operação intensa */
+  --row-height: 48px;
+  --row-height-compact: 36px;
+
+  /* ── Forma: escala curta de raios ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* ── Elevação: poucos níveis com significado fixo ── */
+  --elevation-raised: 0 1px 2px rgba(22, 22, 27, 0.05);
+  --elevation-floating: 0 2px 8px rgba(22, 22, 27, 0.08), 0 1px 2px rgba(22, 22, 27, 0.05);
+  --elevation-overlay: 0 8px 24px rgba(22, 22, 27, 0.14), 0 2px 6px rgba(22, 22, 27, 0.08);
+
+  /* ── Movimento: durações curtas, easing natural ── */
+  --duration-instant: 80ms; /* @kind other */ /* micro-feedback: hover, press */
+  --duration-fast: 140ms; /* @kind other */ /* transições de estado locais */
+  --duration-base: 200ms; /* @kind other */ /* entrada/saída de sobreposições */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1); /* @kind other */
+
+  /* ── Layout ── */
+  --sidebar-width: 240px;
+  --header-height: 56px;
+  --container-max: 1200px;
+}
+
+[data-theme="dark"] {
+  --elevation-raised: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elevation-floating: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elevation-overlay: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+}

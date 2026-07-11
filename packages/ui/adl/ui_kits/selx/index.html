@@ -1,0 +1,69 @@
+<!-- @dsCard group="SelX 2.0" viewport="1440x900" name="SelX 2.0 — app" subtitle="Dashboard, vagas, pipeline, candidatos — interativo" -->
+<!-- @startingPoint section="SelX 2.0" subtitle="App completo do SelX 2.0 (ADL)" viewport="1440x900" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SelX 2.0 — UI kit ADL</title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="data.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="ScreenDashboard.jsx"></script>
+<script type="text/babel" src="ScreenVagas.jsx"></script>
+<script type="text/babel" src="ScreenPipeline.jsx"></script>
+<script type="text/babel" src="ScreenCandidatos.jsx"></script>
+<script type="text/babel" src="CandidatoDrawer.jsx"></script>
+<script type="text/babel">
+const DS0 = window.AIONDesignLanguageADL_e674b3;
+const { AppShell, GlobalSearch, Button, Icon } = DS0;
+
+function SelXApp() {
+  const [screen, setScreen] = React.useState(() => localStorage.getItem('selx-screen') || 'dashboard');
+  const [candidato, setCandidato] = React.useState(null);
+  const go = (id) => { setScreen(id); localStorage.setItem('selx-screen', id); };
+  const abrirCandidato = (id) => setCandidato(id);
+
+  const header = (
+    <div data-screen-label={screen} style={{
+      height: 'var(--header-height)', flexShrink: 0, background: 'var(--surface-default)',
+      borderBottom: '1px solid var(--border-subtle)',
+      display: 'flex', alignItems: 'center', gap: 'var(--space-4)', padding: '0 var(--space-8)',
+      position: 'sticky', top: 0, zIndex: 20,
+    }}>
+      <GlobalSearch placeholder="Buscar vagas, candidatos…" />
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        <Button variant="subtle" size="compact" icon="bell">Notificações</Button>
+        <Button variant="subtle" size="compact" icon="circle-help">Ajuda</Button>
+      </div>
+    </div>
+  );
+
+  const Screen = {
+    dashboard: window.ScreenDashboard,
+    vagas: window.ScreenVagas,
+    pipeline: window.ScreenPipeline,
+    candidatos: window.ScreenCandidatos,
+  }[screen] || window.ScreenDashboard;
+
+  return (
+    <AppShell product="SelX" tenant="Empresa Exemplo" nav={window.selxData.nav}
+      activeItem={screen} onNavigate={go} headerContent={header}
+      user={{ name: 'Marina Castro', role: 'Analista de RH' }}>
+      <div data-screen-label={'tela: ' + screen}>
+        <Screen go={go} abrirCandidato={abrirCandidato} />
+      </div>
+      <window.CandidatoDrawer candidatoId={candidato} onClose={() => setCandidato(null)} />
+    </AppShell>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<SelXApp />);
+</script>
+</body>
+</html>

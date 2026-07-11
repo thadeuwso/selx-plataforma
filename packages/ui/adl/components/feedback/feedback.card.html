@@ -1,0 +1,45 @@
+<!-- @dsCard group="Components" viewport="700x540" name="Feedback" subtitle="Toast, alertas, estado vazio, skeleton, progresso" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body { background: var(--surface-default); margin: 0; padding: 16px; }</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const DS = window.AIONDesignLanguageADL_e674b3;
+const { Toast, Alert, EmptyState, Skeleton, ProgressBar, Button } = DS;
+function Demo() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Toast message="Vaga publicada." actionLabel="Desfazer" onDismiss={() => {}} />
+      <Alert tone="danger" title="Não foi possível salvar" action={<Button variant="secondary" size="compact">Tentar de novo</Button>}>
+        Verifique a conexão e tente de novo.
+      </Alert>
+      <Alert tone="warning" title="12 candidaturas aguardam triagem há mais de 5 dias" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+        <EmptyState icon="inbox" title="Nenhuma candidatura ainda"
+          description="Divulgue a vaga para começar a receber candidatos."
+          action={<Button icon="share-2" size="compact">Divulgar vaga</Button>} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <Skeleton circle height={32} />
+            <div style={{ flex: 1 }}><Skeleton lines={2} /></div>
+          </div>
+          <ProgressBar label="Etapas concluídas" value={62} />
+          <ProgressBar label="Meta de contratações" value={90} tone="success" />
+        </div>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

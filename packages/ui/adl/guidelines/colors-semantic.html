@@ -1,0 +1,52 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Cores de estado" subtitle="Significado fixo em todos os produtos — nunca decorativas" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+body { margin: 0; padding: 16px; background: var(--surface-default); font-family: var(--font-sans); }
+.row { display: flex; gap: 8px; align-items: center; }
+.sw { flex: 1; height: 64px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: flex-end; padding: 6px 8px; box-sizing: border-box; }
+.sw span { font-size: 10px; font-family: var(--font-mono); }
+
+</style>
+</head>
+<body>
+<div class="row" style="gap: 12px;">
+
+<div style="flex:1;">
+  <div style="display:flex; gap:4px;">
+    <div style="flex:2; height:56px; border-radius: var(--radius-md); background: var(--green-500);"></div>
+    <div style="flex:1; height:56px; border-radius: var(--radius-md); background: var(--feedback-success-surface); border: 1px solid var(--feedback-success-border);"></div>
+  </div>
+  <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">Sucesso / aprovado</div>
+  <div style="font-size:10px; font-family: var(--font-mono); color: var(--text-subtle);">--feedback-success</div>
+</div>
+<div style="flex:1;">
+  <div style="display:flex; gap:4px;">
+    <div style="flex:2; height:56px; border-radius: var(--radius-md); background: var(--red-500);"></div>
+    <div style="flex:1; height:56px; border-radius: var(--radius-md); background: var(--feedback-danger-surface); border: 1px solid var(--feedback-danger-border);"></div>
+  </div>
+  <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">Erro / destrutivo</div>
+  <div style="font-size:10px; font-family: var(--font-mono); color: var(--text-subtle);">--feedback-danger</div>
+</div>
+<div style="flex:1;">
+  <div style="display:flex; gap:4px;">
+    <div style="flex:2; height:56px; border-radius: var(--radius-md); background: var(--amber-500);"></div>
+    <div style="flex:1; height:56px; border-radius: var(--radius-md); background: var(--feedback-warning-surface); border: 1px solid var(--feedback-warning-border);"></div>
+  </div>
+  <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">Atenção / pendência</div>
+  <div style="font-size:10px; font-family: var(--font-mono); color: var(--text-subtle);">--feedback-warning</div>
+</div>
+<div style="flex:1;">
+  <div style="display:flex; gap:4px;">
+    <div style="flex:2; height:56px; border-radius: var(--radius-md); background: var(--blue-500);"></div>
+    <div style="flex:1; height:56px; border-radius: var(--radius-md); background: var(--feedback-info-surface); border: 1px solid var(--feedback-info-border);"></div>
+  </div>
+  <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">Informação / em curso</div>
+  <div style="font-size:10px; font-family: var(--font-mono); color: var(--text-subtle);">--feedback-info</div>
+</div>
+</div>
+</body>
+</html>

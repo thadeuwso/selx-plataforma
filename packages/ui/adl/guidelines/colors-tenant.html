@@ -1,0 +1,36 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Acento de tenant" subtitle="Branding por cliente dentro dos limites do ADL" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+body { margin: 0; padding: 16px; background: var(--surface-default); font-family: var(--font-sans); }
+.row { display: flex; gap: 8px; align-items: center; }
+.sw { flex: 1; height: 64px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: flex-end; padding: 6px 8px; box-sizing: border-box; }
+.sw span { font-size: 10px; font-family: var(--font-mono); }
+
+</style>
+</head>
+<body>
+<div class="row" style="gap: 12px; align-items: stretch;">
+
+<div style="flex:1; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; ">
+  <div style="font-size: 11px; color: var(--text-subtle); margin-bottom: 8px;">Padrão AION</div>
+  <span style="background: var(--tenant-accent); color: #fff; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: var(--radius-md);">Publicar vaga</span>
+  <div style="margin-top: 10px; background: var(--tenant-accent-surface); color: var(--tenant-accent); font-size: 11px; padding: 3px 10px; border-radius: 999px; display: inline-block;">item selecionado</div>
+</div>
+<div style="flex:1; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; --tenant-accent: #1B4D4A; --tenant-accent-surface: #E7F0EE;">
+  <div style="font-size: 11px; color: var(--text-subtle); margin-bottom: 8px;">Tenant A</div>
+  <span style="background: var(--tenant-accent); color: #fff; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: var(--radius-md);">Publicar vaga</span>
+  <div style="margin-top: 10px; background: var(--tenant-accent-surface); color: var(--tenant-accent); font-size: 11px; padding: 3px 10px; border-radius: 999px; display: inline-block;">item selecionado</div>
+</div>
+<div style="flex:1; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; --tenant-accent: #7E2E2A; --tenant-accent-surface: #F7ECEB;">
+  <div style="font-size: 11px; color: var(--text-subtle); margin-bottom: 8px;">Tenant B</div>
+  <span style="background: var(--tenant-accent); color: #fff; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: var(--radius-md);">Publicar vaga</span>
+  <div style="margin-top: 10px; background: var(--tenant-accent-surface); color: var(--tenant-accent); font-size: 11px; padding: 3px 10px; border-radius: 999px; display: inline-block;">item selecionado</div>
+</div>
+</div>
+<div style="font-size: 11px; color: var(--text-subtle); margin-top: 8px;">Somente <code style="font-family: var(--font-mono);">--tenant-accent-*</code> podem ser sobrescritos por cliente — o resto da linguagem é inegociável.</div>
+</body>
+</html>
