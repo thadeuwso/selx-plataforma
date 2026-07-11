@@ -1,6 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
+
+interface Papel {
+  codPap: string;
+  nomePap: string;
+}
 
 interface Usuario {
   codUsu: string;
@@ -15,15 +21,42 @@ const celula: React.CSSProperties = { padding: "10px 14px" };
 
 export default function PaginaUsuarios() {
   const [lista, setLista] = useState<Usuario[]>([]);
+  const [papeis, setPapeis] = useState<Papel[]>([]);
   const [semPermissao, setSemPermissao] = useState(false);
+  const [aberta, setAberta] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState({ nomeUsu: "", email: "", senha: "", codPap: "" });
+
+  const carregar = useCallback(async () => {
+    const r = await api<Usuario[]>("/usuarios");
+    if (r.status === 403) setSemPermissao(true);
+    else if (r.status === 200 && r.json) setLista(r.json);
+    const p = await api<Papel[]>("/papeis");
+    if (p.status === 200 && p.json) setPapeis(p.json);
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      const r = await api<Usuario[]>("/usuarios");
-      if (r.status === 403) setSemPermissao(true);
-      else if (r.status === 200 && r.json) setLista(r.json);
-    })();
-  }, []);
+    void carregar();
+  }, [carregar]);
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setErro(null);
+    setSalvando(true);
+    const r = await api("/usuarios", {
+      metodo: "POST",
+      corpo: { nomeUsu: form.nomeUsu, email: form.email, senha: form.senha, papeis: [form.codPap] },
+    });
+    setSalvando(false);
+    if (r.status !== 201) {
+      setErro(r.status === 403 ? "Sem permissão para criar usuários." : "Não foi possível criar — confira e-mail (único) e senha (mínimo 8).");
+      return;
+    }
+    setAberta(false);
+    setForm({ nomeUsu: "", email: "", senha: "", codPap: "" });
+    await carregar();
+  }
 
   if (semPermissao)
     return (
@@ -34,12 +67,43 @@ export default function PaginaUsuarios() {
 
   return (
     <main style={{ padding: 32 }}>
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Usuários e papéis</h1>
-        <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-          {lista.length} usuário(s) com acesso ao grupo.
-        </p>
+      <header style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Usuários e papéis</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
+            {lista.length} usuário(s) com acesso ao grupo.
+          </p>
+        </div>
+        <BotaoPrimario onClick={() => setAberta(true)}>Novo usuário</BotaoPrimario>
       </header>
+
+      <Gaveta titulo="Novo usuário" aberta={aberta} fechar={() => setAberta(false)}>
+        <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>
+          <Campo rotulo="Nome">
+            <Entrada required value={form.nomeUsu} onChange={(e) => setForm({ ...form, nomeUsu: e.target.value })} />
+          </Campo>
+          <Campo rotulo="E-mail">
+            <Entrada required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </Campo>
+          <Campo rotulo="Senha provisória (mínimo 8 caracteres)">
+            <Entrada required type="password" minLength={8} value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} />
+          </Campo>
+          <Campo rotulo="Papel">
+            <Selecao required value={form.codPap} onChange={(e) => setForm({ ...form, codPap: e.target.value })}>
+              <option value="">— selecione —</option>
+              {papeis.map((p) => (
+                <option key={p.codPap} value={p.codPap}>
+                  {p.nomePap}
+                </option>
+              ))}
+            </Selecao>
+          </Campo>
+          <Erro mensagem={erro} />
+          <BotaoPrimario type="submit" disabled={salvando}>
+            {salvando ? "Criando..." : "Criar usuário"}
+          </BotaoPrimario>
+        </form>
+      </Gaveta>
       <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
