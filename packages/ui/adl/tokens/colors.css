@@ -4,7 +4,7 @@
    cor é semântica; contraste calibrado; claro e escuro nascem juntos. */
 
 :root {
-  /* ── Primitivos: neutros (frios, levemente tingidos do índigo da marca) ── */
+  /* ── Primitivos: neutros (quentes, harmonizados com o off-white da marca) ── */
   --neutral-0:   #FFFFFF;
   --neutral-25:  #FBFBFC;
   --neutral-50:  #F6F6F8;
@@ -19,7 +19,7 @@
   --neutral-900: #222228;
   --neutral-950: #16161B;
 
-  /* ── Primitivos: marca (índigo profundo dessaturado) ── */
+  /* ── Primitivos: marca (marrom SelX #5B3A29 — kit oficial 2026-07-11; acento dourado #A87832) ── */
   --brand-50:  #F0F0F6;
   --brand-100: #E2E2ED;
   --brand-200: #C7C7DC;
@@ -30,6 +30,7 @@
   --brand-700: #3B3A5C;
   --brand-800: #2E2D49;
   --brand-900: #232238;
+  --brand-accent: #A87832;
   --brand-950: #17172A;
 
   /* ── Primitivos: semânticos de estado (dessaturados, significado fixo) ── */
