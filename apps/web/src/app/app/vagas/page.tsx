@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
@@ -239,7 +240,21 @@ export default function PaginaVagas() {
                       {cor.rotulo}
                     </span>
                   </td>
-                  <td style={{ ...celula, display: "flex", gap: 6 }}>
+                  <td style={{ ...celula, display: "flex", gap: 6, alignItems: "center" }}>
+                    <Link
+                      href={`/app/vagas/${v.codVag}`}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        border: "1px solid var(--border-default)",
+                        background: "var(--surface-page)",
+                        color: "var(--text-default)",
+                        fontSize: 12,
+                        textDecoration: "none",
+                      }}
+                    >
+                      Pipeline
+                    </Link>
                     {(ACOES_POR_STATUS[v.status] ?? []).map((a) => (
                       <button
                         key={a.acao}

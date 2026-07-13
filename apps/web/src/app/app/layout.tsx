@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 const itens = [
   { rota: "/app", rotulo: "Empresas" },
   { rota: "/app/vagas", rotulo: "Vagas" },
+  { rota: "/app/candidatos", rotulo: "Candidatos" },
   { rota: "/app/funcionarios", rotulo: "Funcionários" },
   { rota: "/app/organizacao", rotulo: "Organização" },
   { rota: "/app/usuarios", rotulo: "Usuários" },
@@ -82,7 +83,6 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
               {i.rotulo}
             </Link>
           ))}
-          <span style={{ padding: "8px 10px", opacity: 0.45, fontSize: 13 }}>Candidatos (em breve)</span>
         </nav>
         <button
           onClick={alternarTema}
