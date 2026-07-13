@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.gateway import redigir_pii
+from app.gateway import _validar_saida, redigir_pii
 from app.main import app
 
 cliente = TestClient(app)
@@ -41,3 +41,34 @@ def test_ia_desabilitada_e_estado_de_primeira_classe():
     )
     assert r.status_code == 503
     assert r.json()["detail"]["codigo"] == "IA_DESABILITADA"
+
+
+def test_esquema_saida_sem_validacao_retorna_string():
+    assert _validar_saida("texto livre", None) is None
+
+
+def test_esquema_saida_valida_json_conforme():
+    esquema = {"type": "object", "required": ["titulo"], "properties": {"titulo": {"type": "string"}}}
+    resultado = _validar_saida('{"titulo": "Analista"}', esquema)
+    assert resultado == {"titulo": "Analista"}
+
+
+def test_esquema_saida_rejeita_json_invalido_para_o_schema():
+    import pytest
+    from fastapi import HTTPException
+
+    esquema = {"type": "object", "required": ["titulo"], "properties": {"titulo": {"type": "string"}}}
+    with pytest.raises(HTTPException) as exc:
+        _validar_saida('{"outraCoisa": 1}', esquema)
+    assert exc.value.status_code == 422
+    assert exc.value.detail["codigo"] == "SAIDA_INVALIDA"
+
+
+def test_esquema_saida_rejeita_texto_que_nao_e_json():
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        _validar_saida("isso não é JSON", {"type": "object"})
+    assert exc.value.status_code == 422
+    assert exc.value.detail["codigo"] == "SAIDA_INVALIDA"

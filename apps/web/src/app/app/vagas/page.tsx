@@ -24,6 +24,22 @@ interface Opcao {
   codDep?: string;
   descrDep?: string;
 }
+interface Requisito {
+  descrReq: string;
+  tipoReq: "OBRIGATORIO" | "DESEJAVEL";
+  knockout: boolean;
+  origemIa: boolean;
+}
+interface RespostaEstruturarIa {
+  titulo: string;
+  senioridade: string | null;
+  modeloTrab: string | null;
+  local: string | null;
+  vlrSalMin: number | null;
+  vlrSalMax: number | null;
+  requisitos: { descrReq: string; tipoReq: "OBRIGATORIO" | "DESEJAVEL"; knockout: boolean }[];
+  perguntas: { pergunta: string }[];
+}
 
 const celula: React.CSSProperties = { padding: "10px 14px" };
 
@@ -66,6 +82,11 @@ export default function PaginaVagas() {
     codCar: "",
     codDep: "",
   });
+  const [requisitos, setRequisitos] = useState<Requisito[]>([]);
+  const [textoIa, setTextoIa] = useState("");
+  const [estruturando, setEstruturando] = useState(false);
+  const [erroIa, setErroIa] = useState<string | null>(null);
+  const [iaAplicada, setIaAplicada] = useState(false);
 
   const carregar = useCallback(async () => {
     const [v, e, c, d] = await Promise.all([
@@ -90,6 +111,57 @@ export default function PaginaVagas() {
     await carregar();
   }
 
+  function fecharGaveta() {
+    setAberta(false);
+    setTextoIa("");
+    setErroIa(null);
+    setIaAplicada(false);
+    setRequisitos([]);
+  }
+
+  /** Cola a descrição bruta e estrutura com IA (AI Gateway) — nada é publicado sozinho, o RH revisa aqui. */
+  async function estruturarComIa() {
+    if (textoIa.trim().length < 40) {
+      setErroIa("Cole uma descrição com pelo menos 40 caracteres.");
+      return;
+    }
+    setErroIa(null);
+    setEstruturando(true);
+    const r = await api<RespostaEstruturarIa>("/vagas/estruturar-ia", {
+      metodo: "POST",
+      corpo: { rawText: textoIa },
+    });
+    setEstruturando(false);
+    if (r.status !== 201 || !r.json) {
+      setErroIa("A IA não conseguiu estruturar agora — preencha manualmente abaixo.");
+      return;
+    }
+    const d = r.json;
+    setForm((f) => ({
+      ...f,
+      titulo: d.titulo ?? f.titulo,
+      senioridade: d.senioridade ?? f.senioridade,
+      modeloTrab: d.modeloTrab ?? f.modeloTrab,
+      local: d.local ?? f.local,
+      vlrSalMin: d.vlrSalMin != null ? String(d.vlrSalMin) : f.vlrSalMin,
+      vlrSalMax: d.vlrSalMax != null ? String(d.vlrSalMax) : f.vlrSalMax,
+    }));
+    setRequisitos(
+      (d.requisitos ?? []).map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq, knockout: r.knockout, origemIa: true })),
+    );
+    setIaAplicada(true);
+  }
+
+  function adicionarRequisito() {
+    setRequisitos((r) => [...r, { descrReq: "", tipoReq: "OBRIGATORIO", knockout: false, origemIa: false }]);
+  }
+  function removerRequisito(i: number) {
+    setRequisitos((r) => r.filter((_, idx) => idx !== i));
+  }
+  function atualizarRequisito(i: number, patch: Partial<Requisito>) {
+    setRequisitos((r) => r.map((req, idx) => (idx === i ? { ...req, ...patch, origemIa: false } : req)));
+  }
+
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
@@ -106,6 +178,9 @@ export default function PaginaVagas() {
         vlrSalMax: form.vlrSalMax ? Number(form.vlrSalMax) : undefined,
         codCar: form.codCar || undefined,
         codDep: form.codDep || undefined,
+        requisitos: requisitos
+          .filter((r) => r.descrReq.trim())
+          .map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq, knockout: r.knockout ? "S" : "N" })),
       },
     });
     setSalvando(false);
@@ -113,8 +188,8 @@ export default function PaginaVagas() {
       setErro(r.status === 403 ? "Sem permissão (recrutamento.vagas.criar)." : "Não foi possível criar a vaga.");
       return;
     }
-    setAberta(false);
     setForm({ codEmp: "", titulo: "", senioridade: "", modeloTrab: "", local: "", vlrSalMin: "", vlrSalMax: "", codCar: "", codDep: "" });
+    fecharGaveta();
     await carregar();
   }
 
@@ -198,8 +273,64 @@ export default function PaginaVagas() {
         </table>
       </div>
 
-      <Gaveta titulo="Nova vaga" aberta={aberta} fechar={() => setAberta(false)}>
-        <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>
+      <Gaveta titulo="Nova vaga" aberta={aberta} fechar={fecharGaveta}>
+        <div
+          style={{
+            background: "var(--surface-page)",
+            border: "1px solid var(--border-default)",
+            borderRadius: 10,
+            padding: 14,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            ✨ Estruturar com IA
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+            Cole a descrição da vaga (de um e-mail, doc ou anúncio anterior). A IA sugere título, requisitos e
+            perguntas — nada é publicado automaticamente, você revisa e edita antes de criar.
+          </p>
+          <textarea
+            value={textoIa}
+            onChange={(e) => setTextoIa(e.target.value)}
+            rows={4}
+            placeholder="Cole aqui a descrição bruta da vaga..."
+            style={{
+              padding: "10px 12px",
+              border: "1px solid var(--border-default)",
+              borderRadius: 8,
+              background: "var(--surface-default)",
+              color: "var(--text-default)",
+              font: "inherit",
+              fontSize: 13,
+              resize: "vertical",
+            }}
+          />
+          <Erro mensagem={erroIa} />
+          <button
+            type="button"
+            onClick={estruturarComIa}
+            disabled={estruturando}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid var(--border-default)",
+              background: "var(--surface-default)",
+              color: "var(--text-default)",
+              font: "inherit",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              opacity: estruturando ? 0.6 : 1,
+              justifySelf: "start",
+            }}
+          >
+            {estruturando ? "Analisando com IA…" : iaAplicada ? "Analisar novamente" : "Analisar e estruturar vaga"}
+          </button>
+        </div>
+
+        <form onSubmit={salvar} style={{ display: "grid", gap: 14, marginTop: 18 }}>
           <Campo rotulo="Título">
             <Entrada required value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} />
           </Campo>
@@ -258,6 +389,78 @@ export default function PaginaVagas() {
               </Selecao>
             </Campo>
           </div>
+
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Requisitos</span>
+              <button
+                type="button"
+                onClick={adicionarRequisito}
+                style={{ border: "none", background: "none", color: "var(--action-primary, var(--brand-700))", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+              >
+                + adicionar
+              </button>
+            </div>
+            {requisitos.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                Nenhum requisito ainda — use a IA acima ou adicione manualmente.
+              </p>
+            )}
+            <div style={{ display: "grid", gap: 8 }}>
+              {requisitos.map((r, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto auto auto",
+                    gap: 8,
+                    alignItems: "center",
+                    padding: 8,
+                    border: "1px solid var(--border-default)",
+                    borderRadius: 8,
+                  }}
+                >
+                  <Entrada
+                    value={r.descrReq}
+                    placeholder="Descrição do requisito"
+                    onChange={(e) => atualizarRequisito(i, { descrReq: e.target.value })}
+                    style={{ fontSize: 13 }}
+                  />
+                  <Selecao
+                    value={r.tipoReq}
+                    onChange={(e) => atualizarRequisito(i, { tipoReq: e.target.value as Requisito["tipoReq"] })}
+                    style={{ fontSize: 12, padding: "6px 8px" }}
+                  >
+                    <option value="OBRIGATORIO">Obrigatório</option>
+                    <option value="DESEJAVEL">Desejável</option>
+                  </Selecao>
+                  <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={r.knockout} onChange={(e) => atualizarRequisito(i, { knockout: e.target.checked })} />
+                    Eliminatório
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {r.origemIa && (
+                      <span
+                        title="Gerado pela IA"
+                        style={{ fontSize: 11, padding: "2px 6px", borderRadius: 999, background: "var(--brand-100)", color: "var(--brand-800)" }}
+                      >
+                        ✨ IA
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removerRequisito(i)}
+                      aria-label="Remover requisito"
+                      style={{ border: "none", background: "none", color: "var(--red-600, #9A3833)", cursor: "pointer", fontSize: 16 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
             {salvando ? "Criando..." : "Criar vaga (rascunho)"}
