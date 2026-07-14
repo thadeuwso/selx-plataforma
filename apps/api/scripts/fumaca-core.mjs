@@ -446,6 +446,141 @@ verificar("reassinar já assinado → 400", assinarPubDeNovo.status === 400);
 const tokenInvalido = await http("GET", "/assinaturas/publico/token-inexistente-xyz");
 verificar("token inválido → 400", tokenInvalido.status === 400);
 
+// 17. Processo de Admissão completo (fluxo real vlow — Thadeu, 2026-07-14)
+const candCarlos = await http("POST", "/candidatos", { nomeCand: "Carlos Almeida", email: `carlos.${rodada}@mail.com` }, tokenA2);
+verificar("cadastra candidato p/ teste de processo de admissão (201)", candCarlos.status === 201);
+
+const cdtProc = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Carlos Almeida", email: `carlos.${rodada}@mail.com` },
+  codCanal: canal.json?.codCanal,
+}, tokenA2);
+verificar("candidatura p/ processo de admissão (201)", cdtProc.status === 201);
+
+const iniciarCedo = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/iniciar`, {}, tokenA2);
+verificar("iniciar admissão antes de hired → 400", iniciarCedo.status === 400);
+
+const moverProcHired = await http("PATCH", `/candidaturas/${cdtProc.json?.codCdt}/estagio`, { estagio: "hired" }, tokenA2);
+verificar("move candidatura de admissão p/ hired", moverProcHired.status === 200 && moverProcHired.json?.estagio === "hired");
+
+const iniciar = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/iniciar`, {}, tokenA2);
+verificar("inicia processo de admissão, gera token público (201)", iniciar.status === 201 && !!iniciar.json?.tokenPub && iniciar.json?.status === "AGUARDANDO_CANDIDATO");
+const tokenAdm = iniciar.json?.tokenPub;
+
+const iniciarDeNovo = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/iniciar`, {}, tokenA2);
+verificar("reiniciar é idempotente (mesmo processo)", iniciarDeNovo.json?.codAdmProc === iniciar.json?.codAdmProc);
+
+const detalheRh = await http("GET", `/candidaturas/${cdtProc.json?.codCdt}/admissao`, null, tokenA2);
+verificar("RH vê detalhe do processo", detalheRh.status === 200 && detalheRh.json?.status === "AGUARDANDO_CANDIDATO");
+
+const consultaAdmInvalida = await http("GET", "/admissao/publico/token-inexistente-xyz");
+verificar("token de admissão inválido → 400", consultaAdmInvalida.status === 400);
+
+const consultaAdmPub = await http("GET", `/admissao/publico/${tokenAdm}`);
+verificar(
+  "candidato consulta processo publicamente (sem login)",
+  consultaAdmPub.status === 200 && consultaAdmPub.json?.candidatura?.candidato?.nomeCand === "Carlos Almeida",
+);
+
+const dados1 = await http("POST", `/admissao/publico/${tokenAdm}/dados`, { endereco: "Rua das Flores, 100" });
+verificar("candidato preenche dados complementares (parte 1)", dados1.status === 201);
+
+const dados2 = await http("POST", `/admissao/publico/${tokenAdm}/dados`, { banco: "Itaú", agencia: "0001" });
+verificar("candidato preenche dados complementares (parte 2, faz merge)", dados2.status === 201);
+
+const consultaAposDados = await http("GET", `/admissao/publico/${tokenAdm}`);
+verificar(
+  "dados complementares acumulam (merge), não sobrescrevem",
+  consultaAposDados.json?.dadosComplementaresJson?.endereco === "Rua das Flores, 100" &&
+    consultaAposDados.json?.dadosComplementaresJson?.banco === "Itaú",
+);
+
+const formRg = new FormData();
+formRg.set("categoria", "RG");
+formRg.set("arquivo", new Blob([Buffer.from([0xff, 0xd8, 0xff, 0xdb])], { type: "image/jpeg" }), "rg-frente.jpg");
+const uploadRgRes = await fetch(`${base}/admissao/publico/${tokenAdm}/anexos`, { method: "POST", body: formRg });
+const uploadRgJson = await uploadRgRes.json().catch(() => null);
+verificar("candidato anexa foto do RG (201)", uploadRgRes.status === 201 && uploadRgJson?.categoria === "RG");
+
+const formInvalido = new FormData();
+formInvalido.set("categoria", "CPF");
+formInvalido.set("arquivo", new Blob(["texto puro"], { type: "text/plain" }), "cpf.txt");
+const uploadInvalidoRes = await fetch(`${base}/admissao/publico/${tokenAdm}/anexos`, { method: "POST", body: formInvalido });
+verificar("anexo em formato não suportado → 400", uploadInvalidoRes.status === 400);
+
+const consultaAposAnexo = await http("GET", `/admissao/publico/${tokenAdm}`);
+verificar("anexo aparece na consulta pública (1 anexo)", consultaAposAnexo.json?.anexos?.length === 1);
+
+const enviarCandidato = await http("POST", `/admissao/publico/${tokenAdm}/enviar`, {});
+verificar("candidato envia p/ aprovação do DP", enviarCandidato.status === 201 && enviarCandidato.json?.status === "AGUARDANDO_APROVACAO_DP");
+
+const dadosAposEnvio = await http("POST", `/admissao/publico/${tokenAdm}/dados`, { extra: "não deveria entrar" });
+verificar("editar dados após envio → 400 (aguardando DP)", dadosAposEnvio.status === 400);
+
+const ajustes = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/solicitar-ajustes`, {
+  obsAjuste: "Falta comprovante de residência legível",
+}, tokenA2);
+verificar("DP solicita ajustes (201)", ajustes.status === 201 && ajustes.json?.status === "AJUSTES_SOLICITADOS");
+
+const consultaAposAjuste = await http("GET", `/admissao/publico/${tokenAdm}`);
+verificar(
+  "candidato vê observação de ajuste",
+  consultaAposAjuste.json?.status === "AJUSTES_SOLICITADOS" && consultaAposAjuste.json?.obsAjuste?.includes("comprovante"),
+);
+
+const dadosAposAjuste = await http("POST", `/admissao/publico/${tokenAdm}/dados`, { comprovanteReenviado: true });
+verificar("candidato pode editar dados de novo após ajuste solicitado", dadosAposAjuste.status === 201);
+
+const reenviar = await http("POST", `/admissao/publico/${tokenAdm}/enviar`, {});
+verificar("candidato reenvia após ajuste", reenviar.status === 201 && reenviar.json?.status === "AGUARDANDO_APROVACAO_DP");
+
+const aprovarSemContrato = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/aprovar`, {
+  numCad: 9700 + (rodada % 200),
+  dtAdm: "2026-09-01",
+  vlrSal: 4800,
+}, tokenA2);
+verificar("aprovar sem codDocContrato → 400", aprovarSemContrato.status === 400);
+
+const modeloContrato = await http("POST", "/documentos-modelo", {
+  nomeDoc: "Contrato de Trabalho Padrão",
+  conteudoModelo: "Contrato de {{nomeFun}}, CPF {{cgc}}, admitido em {{dtAdm}}.",
+}, tokenA2);
+verificar("cria modelo de contrato p/ admissão (201)", modeloContrato.status === 201);
+
+const modeloTermoLgpd = await http("POST", "/documentos-modelo", {
+  nomeDoc: "Termo de Consentimento LGPD",
+  conteudoModelo: "Eu, {{nomeFun}}, autorizo o tratamento dos meus dados pessoais.",
+}, tokenA2);
+verificar("cria modelo do kit admissional (201)", modeloTermoLgpd.status === 201);
+
+const kit = await http("POST", "/kits-admissionais", {
+  nomeKit: "Kit Admissional Padrão",
+  codDocumentos: [modeloTermoLgpd.json?.codDoc],
+}, tokenA2);
+verificar("cria kit admissional (201)", kit.status === 201 && !!kit.json?.codKit);
+
+const aprovarAdmissao = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/aprovar`, {
+  numCad: 9700 + (rodada % 200),
+  dtAdm: "2026-09-01",
+  vlrSal: 4800,
+  codDocContrato: modeloContrato.json?.codDoc,
+  codKit: kit.json?.codKit,
+}, tokenA2);
+verificar(
+  "DP aprova: cria funcionário + dispara contrato + kit p/ assinatura (201)",
+  aprovarAdmissao.status === 201 && !!aprovarAdmissao.json?.codFun && aprovarAdmissao.json?.assinaturas?.length === 2,
+);
+
+const aprovarDeNovo = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/aprovar`, {
+  numCad: 9999, dtAdm: "2026-09-01", codDocContrato: modeloContrato.json?.codDoc,
+}, tokenA2);
+verificar("segunda aprovação bloqueada (já aprovado) → 400", aprovarDeNovo.status === 400);
+
+const assinaturasGeradas = await http("GET", `/funcionarios/${aprovarAdmissao.json?.codFun}/assinaturas`, null, tokenA2);
+verificar(
+  "funcionário recém-admitido tem 2 assinaturas pendentes (contrato + kit)",
+  assinaturasGeradas.status === 200 && assinaturasGeradas.json?.length === 2 && assinaturasGeradas.json.every((a) => a.status === "PENDENTE"),
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

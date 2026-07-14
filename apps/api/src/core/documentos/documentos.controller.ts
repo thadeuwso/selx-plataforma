@@ -1,10 +1,9 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
-import { createHash, randomBytes } from 'node:crypto';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
 import { PrismaService } from '../../compartilhado/prisma/prisma.service';
-import { renderizarModelo } from './renderizar-modelo';
+import { DocumentosService } from './documentos.service';
 
 const esquemaModelo = z.object({
   nomeDoc: z.string().min(3),
@@ -28,7 +27,10 @@ type ReqAut = Request & { usuario: UsuarioAutenticado };
 
 @Controller()
 export class DocumentosController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly documentosService: DocumentosService,
+  ) {}
 
   // ===== Modelos de documento =====
   @Get('documentos-modelo')
@@ -76,33 +78,14 @@ export class DocumentosController {
   @Permissoes('core.documentos.criar')
   enviarParaAssinatura(@Req() req: ReqAut, @Param('codFun') codFun: string, @Body() corpo: unknown) {
     const dados = validar(esquemaEnvio, corpo);
-    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const funcionario = await tx.funcionario.findFirst({
-        where: { codFun: BigInt(codFun), ativo: 'S' },
-        include: { empresa: true, cargo: true, departamento: true },
-      });
-      if (!funcionario) throw new BadRequestException('Funcionário inexistente neste tenant');
-
-      const modelo = await tx.documentoModelo.findFirst({ where: { codDoc: dados.codDoc, ativo: 'S' } });
-      if (!modelo) throw new BadRequestException('Modelo de documento inexistente neste tenant');
-
-      const conteudoRenderizado = renderizarModelo(modelo.conteudoModelo, funcionario);
-      const hashConteudo = createHash('sha256').update(conteudoRenderizado).digest('hex');
-      const tokenPub = randomBytes(24).toString('hex');
-
-      const assinatura = await tx.assinatura.create({
-        data: {
-          codTen: req.usuario.codTen,
-          codDoc: modelo.codDoc,
-          codFun: funcionario.codFun,
-          conteudoRenderizado,
-          hashConteudo,
-          tokenPub,
-          codUsuInc: req.usuario.codUsu,
-        },
-        select: { codAssin: true, tokenPub: true, status: true },
-      });
-      return assinatura;
-    });
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      this.documentosService.enviarParaAssinatura(
+        tx,
+        req.usuario.codTen,
+        req.usuario.codUsu,
+        BigInt(codFun),
+        dados.codDoc,
+      ),
+    );
   }
 }

@@ -56,6 +56,10 @@ model Tenant {
   matchResumos   MatchResumo[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
+  kits           KitAdmissional[]
+  kitDocumentos  KitAdmissionalDocumento[]
+  admissaoProcessos ProcessoAdmissao[]
+  admissaoAnexos AdmissaoAnexo[]
 
   @@map("TSXTEN")
 }
@@ -630,6 +634,7 @@ model Candidatura {
   funcionario Funcionario?         @relation(fields: [codFun], references: [codFun])
   timeline  CandidaturaHistorico[]
   match     MatchResumo?
+  processoAdmissao ProcessoAdmissao?
 
   @@unique([codVag, codCand])
   @@index([codTen, codVag, estagio])
@@ -720,6 +725,7 @@ model DocumentoModelo {
 
   tenant      Tenant       @relation(fields: [codTen], references: [codTen])
   assinaturas Assinatura[]
+  kitItens    KitAdmissionalDocumento[]
 
   @@map("TSXDOC")
 }
@@ -745,4 +751,78 @@ model Assinatura {
 
   @@index([codTen, codFun])
   @@map("TSXASSIN")
+}
+
+// ===== Kit Admissional (Core — TSX) =====
+
+/// Kit nomeado de documentos enviados juntos ao aprovar uma admissão.
+model KitAdmissional {
+  codKit    BigInt   @id @default(autoincrement()) @map("CODKIT")
+  codTen    BigInt   @map("CODTEN")
+  nomeKit   String   @map("NOMEKIT")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant Tenant                   @relation(fields: [codTen], references: [codTen])
+  itens  KitAdmissionalDocumento[]
+
+  @@map("TSXKIT")
+}
+
+model KitAdmissionalDocumento {
+  codKitDoc BigInt @id @default(autoincrement()) @map("CODKITDOC")
+  codTen    BigInt @map("CODTEN")
+  codKit    BigInt @map("CODKIT")
+  codDoc    BigInt @map("CODDOC")
+  ordem     Int    @default(1) @map("ORDEM")
+
+  tenant    Tenant          @relation(fields: [codTen], references: [codTen])
+  kit       KitAdmissional  @relation(fields: [codKit], references: [codKit])
+  documento DocumentoModelo @relation(fields: [codDoc], references: [codDoc])
+
+  @@unique([codKit, codDoc])
+  @@map("TSXKITDOC")
+}
+
+// ===== Processo de Admissão (Recrutamento e Seleção — TRE) =====
+// Fluxo real informado pelo Thadeu (2026-07-14, observado no vlow): o
+// funcionário só é criado depois que o DP aprova dados/documentos do
+// candidato — ver "09 - Módulos/Recrutamento e Seleção/04".
+
+model ProcessoAdmissao {
+  codAdmProc              BigInt    @id @default(autoincrement()) @map("CODADMPROC")
+  codTen                  BigInt    @map("CODTEN")
+  codCdt                  BigInt    @unique @map("CODCDT")
+  status                  String    @default("AGUARDANDO_CANDIDATO") @map("STATUS")
+  tokenPub                String    @unique @map("TOKENPUB")
+  dadosComplementaresJson Json?     @map("DADOSCOMPLEMENTARESJSON")
+  obsAjuste               String?   @map("OBSAJUSTE")
+  dhInicio                DateTime  @default(now()) @map("DHINICIO")
+  dhEnvioCandidato        DateTime? @map("DHENVIOCANDIDATO")
+  dhAprovacao             DateTime? @map("DHAPROVACAO")
+  codUsuAprov             BigInt?   @map("CODUSUAPROV")
+  codUsuInc               BigInt?   @map("CODUSUINC")
+
+  tenant      Tenant          @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura     @relation(fields: [codCdt], references: [codCdt])
+  anexos      AdmissaoAnexo[]
+
+  @@map("TREADMPROC")
+}
+
+model AdmissaoAnexo {
+  codAdmAnexo  BigInt   @id @default(autoincrement()) @map("CODADMANEXO")
+  codTen       BigInt   @map("CODTEN")
+  codAdmProc   BigInt   @map("CODADMPROC")
+  categoria    String   @map("CATEGORIA")
+  arquivo      String   @map("ARQUIVO")
+  nomeOriginal String   @map("NOMEORIGINAL")
+  dhInc        DateTime @default(now()) @map("DHINC")
+
+  tenant   Tenant           @relation(fields: [codTen], references: [codTen])
+  processo ProcessoAdmissao @relation(fields: [codAdmProc], references: [codAdmProc])
+
+  @@index([codTen, codAdmProc])
+  @@map("TREADMANEXO")
 }
