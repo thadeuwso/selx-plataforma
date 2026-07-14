@@ -534,7 +534,7 @@ const reenviar = await http("POST", `/admissao/publico/${tokenAdm}/enviar`, {});
 verificar("candidato reenvia após ajuste", reenviar.status === 201 && reenviar.json?.status === "AGUARDANDO_APROVACAO_DP");
 
 const aprovarSemContrato = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/aprovar`, {
-  numCad: 9700 + (rodada % 200),
+  numCad: 20000 + (rodada % 400),
   dtAdm: "2026-09-01",
   vlrSal: 4800,
 }, tokenA2);
@@ -559,7 +559,7 @@ const kit = await http("POST", "/kits-admissionais", {
 verificar("cria kit admissional (201)", kit.status === 201 && !!kit.json?.codKit);
 
 const aprovarAdmissao = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/aprovar`, {
-  numCad: 9700 + (rodada % 200),
+  numCad: 20000 + (rodada % 400),
   dtAdm: "2026-09-01",
   vlrSal: 4800,
   codDocContrato: modeloContrato.json?.codDoc,
@@ -579,6 +579,31 @@ const assinaturasGeradas = await http("GET", `/funcionarios/${aprovarAdmissao.js
 verificar(
   "funcionário recém-admitido tem 2 assinaturas pendentes (contrato + kit)",
   assinaturasGeradas.status === 200 && assinaturasGeradas.json?.length === 2 && assinaturasGeradas.json.every((a) => a.status === "PENDENTE"),
+);
+
+// 18. Listagens tenant-wide p/ o dashboard (GET /admissoes, GET /assinaturas)
+const admissoesLista = await http("GET", "/admissoes", null, tokenA2);
+verificar(
+  "GET /admissoes responde 200 com array e enxerga o processo criado",
+  admissoesLista.status === 200 && Array.isArray(admissoesLista.json) && admissoesLista.json.some((p) => p.codCdt === cdtProc.json?.codCdt),
+);
+
+const admissoesListaB = await http("GET", "/admissoes", null, tokenB);
+verificar(
+  "GET /admissoes isola por tenant (B não vê processo do A)",
+  admissoesListaB.status === 200 && !admissoesListaB.json?.some((p) => p.codCdt === cdtProc.json?.codCdt),
+);
+
+const assinaturasLista = await http("GET", "/assinaturas", null, tokenA2);
+verificar(
+  "GET /assinaturas responde 200 com array e enxerga as assinaturas geradas",
+  assinaturasLista.status === 200 && Array.isArray(assinaturasLista.json) && assinaturasLista.json.some((a) => a.codAssin === aprovarAdmissao.json?.assinaturas?.[0]?.codAssin),
+);
+
+const assinaturasListaB = await http("GET", "/assinaturas", null, tokenB);
+verificar(
+  "GET /assinaturas isola por tenant (B não vê assinaturas do A)",
+  assinaturasListaB.status === 200 && !assinaturasListaB.json?.some((a) => a.codAssin === aprovarAdmissao.json?.assinaturas?.[0]?.codAssin),
 );
 
 // Resultado

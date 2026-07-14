@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
@@ -54,6 +54,26 @@ export class DocumentosController {
   }
 
   // ===== Envio para assinatura =====
+  /** Listagem de todas as assinaturas do tenant (dashboard e telas de acompanhamento). */
+  @Get('assinaturas')
+  @Permissoes('core.documentos.ler')
+  listarTodasAssinaturas(@Req() req: ReqAut, @Query('status') status?: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.assinatura.findMany({
+        where: { ...(status ? { status } : {}) },
+        orderBy: { codAssin: 'desc' },
+        select: {
+          codAssin: true,
+          status: true,
+          dhEnvio: true,
+          dhAssinatura: true,
+          documento: { select: { nomeDoc: true } },
+          funcionario: { select: { nomeFun: true } },
+        },
+      }),
+    );
+  }
+
   @Get('funcionarios/:codFun/assinaturas')
   @Permissoes('core.documentos.ler')
   listarAssinaturas(@Req() req: ReqAut, @Param('codFun') codFun: string) {

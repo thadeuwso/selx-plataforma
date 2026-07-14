@@ -3,6 +3,7 @@ import { DocumentosModule } from '../core/documentos/documentos.module';
 import { FuncionariosModule } from '../core/funcionarios/funcionarios.module';
 import { AdmissaoProcessoController } from './admissao-processo.controller';
 import { AdmissaoPublicoController } from './admissao-publico.controller';
+import { AdmissoesListaController } from './admissoes-lista.controller';
 import { CandidatosController } from './candidatos.controller';
 import { CurriculosController } from './curriculos.controller';
 import { IaVagasController } from './ia-vagas.controller';
@@ -17,6 +18,7 @@ import { VagasController } from './vagas.controller';
     CurriculosController,
     AdmissaoProcessoController,
     AdmissaoPublicoController,
+    AdmissoesListaController,
   ],
 })
 export class RecrutamentoModule {}
