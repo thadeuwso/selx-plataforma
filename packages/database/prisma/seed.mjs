@@ -25,6 +25,8 @@ const permissoes = [
   ["core.documentos.ler", "Ver modelos de documento e assinaturas"],
   ["core.documentos.criar", "Enviar documento para assinatura"],
   ["core.documentos.editar", "Criar/editar modelos de documento"],
+  ["gestaopessoas.avaliacoes.ler", "Ver perfis comportamentais de vaga, convites e resultados"],
+  ["gestaopessoas.avaliacoes.criar", "Configurar perfil comportamental da vaga e convidar candidatos"],
 ];
 
 for (const [chavePerm, descrPerm] of permissoes) {

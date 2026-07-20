@@ -60,6 +60,17 @@ model Tenant {
   kitDocumentos  KitAdmissionalDocumento[]
   admissaoProcessos ProcessoAdmissao[]
   admissaoAnexos AdmissaoAnexo[]
+  perfisComportamentaisVaga PerfilComportamentalVaga[]
+  perfisComportamentaisVagaFatores PerfilComportamentalVagaFator[]
+  convitesComportamentais ConviteComportamental[]
+  sessoesComportamentais SessaoComportamental[]
+  consentimentosComportamentais ConsentimentoComportamental[]
+  respostasComportamentais RespostaComportamental[]
+  resultadosComportamentais ResultadoComportamental[]
+  resultadosComportamentaisFatores ResultadoComportamentalFator[]
+  aderenciasComportamentaisVaga AderenciaComportamentalVaga[]
+  aderenciasComportamentaisVagaFatores AderenciaComportamentalVagaFator[]
+  iaResumosComportamentais IAResumoComportamental[]
 
   @@map("TSXTEN")
 }
@@ -489,6 +500,7 @@ model Vaga {
   perguntas    VagaPergunta[]
   canais       VagaCanal[]
   candidaturas Candidatura[]
+  perfisComportamentais PerfilComportamentalVaga[]
 
   @@index([codTen, status])
   @@map("TREVAG")
@@ -646,6 +658,7 @@ model Candidatura {
   timeline  CandidaturaHistorico[]
   match     MatchResumo?
   processoAdmissao ProcessoAdmissao?
+  convitesComportamentais ConviteComportamental[]
 
   @@unique([codVag, codCand])
   @@index([codTen, codVag, estagio])
@@ -714,6 +727,321 @@ model MatchResumo {
   candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
 
   @@map("TREMATCH")
+}
+
+// ===== Gestão de Pessoas — Avaliação Comportamental (TGP, exclusivo do SelexOps) =====
+// Metodologia própria (Direcionamento/Conexão/Sustentação/Precisão — nunca expor
+// equivalência com metodologias comerciais). Motor de pontuação determinístico
+// (RN-GP-006); IA só explica resultado já calculado, nunca decide. Ver
+// "09 - Módulos/Gestão de Pessoas/01 - Modelo de Dados.md". Catálogo (fator,
+// pergunta, escala, modelo) é GLOBAL — metodologia própria, não customizada por
+// tenant nesta fase (mesma exceção de TSXPERM). Todo o resto é por tenant + RLS.
+
+/// Fator/dimensão comportamental (DIR/CON/SUS/PRE hoje; genérica p/ dimensões
+/// complementares futuras — RN-GP-002). GLOBAL.
+model FatorComportamental {
+  codFat    BigInt   @id @default(autoincrement()) @map("CODFAT")
+  sigla     String   @unique @map("SIGLA")
+  nome      String   @map("NOME")
+  descricao String?  @map("DESCRICAO")
+  ordem     Int      @default(1) @map("ORDEM")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  perguntas          PerguntaComportamental[]
+  perfilVagaFatores  PerfilComportamentalVagaFator[]
+  resultadoFatores   ResultadoComportamentalFator[]
+  aderenciaFatores   AderenciaComportamentalVagaFator[]
+
+  @@map("TGPFAT")
+}
+
+/// Banco de perguntas (RN-GP-001). GLOBAL — ver "02 - Banco de Perguntas.md".
+model PerguntaComportamental {
+  codPer     BigInt   @id @default(autoincrement()) @map("CODPER")
+  codFat     BigInt   @map("CODFAT")
+  texto      String   @map("TEXTO")
+  tipo       String   @map("TIPO")
+  peso       Decimal  @default(1.0) @map("PESO") @db.Decimal(3, 2)
+  status     String   @default("ATIVA") @map("STATUS")
+  versao     Int      @default(1) @map("VERSAO")
+  dificuldadeInterpretacao String? @map("DIFICULDADEINTERPRETACAO")
+  categoria  String?  @map("CATEGORIA")
+  idioma     String   @default("pt-BR") @map("IDIOMA")
+  tagsJson   Json?    @map("TAGSJSON")
+  justificativaMetodologica String? @map("JUSTIFICATIVAMETODOLOGICA")
+  dhInc      DateTime @default(now()) @map("DHINC")
+
+  fator    FatorComportamental @relation(fields: [codFat], references: [codFat])
+  modelos  ModeloAvaliacaoPergunta[]
+  respostas RespostaComportamental[]
+
+  @@index([codFat])
+  @@map("TGPPER")
+}
+
+/// Opção da escala de resposta (normativa 1-5 no v1). GLOBAL.
+model EscalaResposta {
+  codEsc      BigInt @id @default(autoincrement()) @map("CODESC")
+  tipoEscala  String @default("NORMATIVA_1_5") @map("TIPOESCALA")
+  valor       Int    @map("VALOR")
+  rotulo      String @map("ROTULO")
+  ordem       Int    @map("ORDEM")
+
+  respostas RespostaComportamental[]
+
+  @@map("TGPESC")
+}
+
+/// Modelo/questionário de avaliação (ex.: "Avaliação Comportamental Padrão v1"). GLOBAL.
+model ModeloAvaliacaoComportamental {
+  codMod   BigInt    @id @default(autoincrement()) @map("CODMOD")
+  nome     String    @map("NOME")
+  versao   Int       @default(1) @map("VERSAO")
+  status   String    @default("RASCUNHO") @map("STATUS")
+  tempoEstimadoMin Int? @map("TEMPOESTIMADOMIN")
+  tempoEstimadoMax Int? @map("TEMPOESTIMADOMAX")
+  dhPublicacao DateTime? @map("DHPUBLICACAO")
+  dhInc    DateTime  @default(now()) @map("DHINC")
+
+  perguntas ModeloAvaliacaoPergunta[]
+  perfisVaga PerfilComportamentalVaga[]
+  convites  ConviteComportamental[]
+
+  @@map("TGPMOD")
+}
+
+/// Modelo × Pergunta (N:N, com ordem de cadastro). GLOBAL.
+model ModeloAvaliacaoPergunta {
+  codModPer BigInt @id @default(autoincrement()) @map("CODMODPER")
+  codMod    BigInt @map("CODMOD")
+  codPer    BigInt @map("CODPER")
+  ordem     Int    @default(1) @map("ORDEM")
+
+  modelo   ModeloAvaliacaoComportamental @relation(fields: [codMod], references: [codMod])
+  pergunta PerguntaComportamental        @relation(fields: [codPer], references: [codPer])
+
+  @@unique([codMod, codPer])
+  @@map("TGPMODPER")
+}
+
+/// Perfil comportamental desejado da vaga (RN-GP-008). FK cross-módulo p/ TREVAG
+/// (Recrutamento), mesmo padrão de TREVAG.CODCAR -> TFPCAR do Core.
+model PerfilComportamentalVaga {
+  codPerVag BigInt   @id @default(autoincrement()) @map("CODPERVAG")
+  codTen    BigInt   @map("CODTEN")
+  codVag    BigInt   @map("CODVAG")
+  codMod    BigInt   @map("CODMOD")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+
+  tenant   Tenant                        @relation(fields: [codTen], references: [codTen])
+  vaga     Vaga                          @relation(fields: [codVag], references: [codVag])
+  modelo   ModeloAvaliacaoComportamental @relation(fields: [codMod], references: [codMod])
+  fatores  PerfilComportamentalVagaFator[]
+  aderencias AderenciaComportamentalVaga[]
+
+  @@index([codTen, codVag])
+  @@map("TGPPERVAG")
+}
+
+/// Perfil da vaga × fator: faixa desejada, peso, importância, eliminatório (RN-GP-009).
+model PerfilComportamentalVagaFator {
+  codPerVagFat BigInt  @id @default(autoincrement()) @map("CODPERVAGFAT")
+  codTen       BigInt  @map("CODTEN")
+  codPerVag    BigInt  @map("CODPERVAG")
+  codFat       BigInt  @map("CODFAT")
+  minimo       Int     @map("MINIMO")
+  maximo       Int     @map("MAXIMO")
+  peso         Decimal @default(1.0) @map("PESO") @db.Decimal(3, 2)
+  importancia  String  @default("MEDIA") @map("IMPORTANCIA")
+  eliminatorio String  @default("N") @map("ELIMINATORIO") @db.Char(1)
+  justificativa String? @map("JUSTIFICATIVA")
+  tolerancia   Int?    @map("TOLERANCIA")
+
+  tenant     Tenant                    @relation(fields: [codTen], references: [codTen])
+  perfilVaga PerfilComportamentalVaga  @relation(fields: [codPerVag], references: [codPerVag])
+  fator      FatorComportamental       @relation(fields: [codFat], references: [codFat])
+
+  @@unique([codPerVag, codFat])
+  @@map("TGPPERVAGFAT")
+}
+
+/// Convite (token opaco público — ADR-0004 §5, mesmo padrão de Admissão Digital).
+/// FK cross-módulo p/ TRECDT (Recrutamento).
+model ConviteComportamental {
+  codConv      BigInt    @id @default(autoincrement()) @map("CODCONV")
+  codTen       BigInt    @map("CODTEN")
+  codCdt       BigInt    @map("CODCDT")
+  codMod       BigInt    @map("CODMOD")
+  tokenPub     String    @unique @map("TOKENPUB")
+  status       String    @default("PENDENTE") @map("STATUS")
+  dhEnvio      DateTime  @default(now()) @map("DHENVIO")
+  dhExpiracao  DateTime? @map("DHEXPIRACAO")
+  codUsuInc    BigInt?   @map("CODUSUINC")
+
+  tenant      Tenant                        @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura                   @relation(fields: [codCdt], references: [codCdt])
+  modelo      ModeloAvaliacaoComportamental @relation(fields: [codMod], references: [codMod])
+  sessao      SessaoComportamental?
+
+  @@index([codTen, codCdt])
+  @@map("TGPCONV")
+}
+
+/// Sessão de resposta (1:1 com convite) — sustenta pausa/retomada (RN-GP-004).
+model SessaoComportamental {
+  codSes             BigInt    @id @default(autoincrement()) @map("CODSES")
+  codTen             BigInt    @map("CODTEN")
+  codConv            BigInt    @unique @map("CODCONV")
+  dhInicio           DateTime  @default(now()) @map("DHINICIO")
+  codUltimaPergunta  BigInt?   @map("CODULTIMAPERGUNTA")
+  dhConclusao        DateTime? @map("DHCONCLUSAO")
+  tempoTotalSeg      Int?      @map("TEMPOTOTALSEG")
+
+  tenant       Tenant                       @relation(fields: [codTen], references: [codTen])
+  convite      ConviteComportamental        @relation(fields: [codConv], references: [codConv])
+  respostas    RespostaComportamental[]
+  consentimento ConsentimentoComportamental?
+  resultado    ResultadoComportamental?
+
+  @@map("TGPSES")
+}
+
+/// Termo de ciência aceito antes de responder.
+model ConsentimentoComportamental {
+  codConsent BigInt   @id @default(autoincrement()) @map("CODCONSENT")
+  codTen     BigInt   @map("CODTEN")
+  codSes     BigInt   @unique @map("CODSES")
+  dhAceite   DateTime @default(now()) @map("DHACEITE")
+  ip         String?  @map("IP")
+
+  tenant  Tenant                @relation(fields: [codTen], references: [codTen])
+  sessao  SessaoComportamental  @relation(fields: [codSes], references: [codSes])
+
+  @@map("TGPCONSENT")
+}
+
+/// Resposta individual a uma pergunta (RN-GP-005: respostas originais nunca descartadas).
+model RespostaComportamental {
+  codResp    BigInt   @id @default(autoincrement()) @map("CODRESP")
+  codTen     BigInt   @map("CODTEN")
+  codSes     BigInt   @map("CODSES")
+  codPer     BigInt   @map("CODPER")
+  codEsc     BigInt   @map("CODESC")
+  dhResposta DateTime @default(now()) @map("DHRESPOSTA")
+
+  tenant   Tenant                  @relation(fields: [codTen], references: [codTen])
+  sessao   SessaoComportamental    @relation(fields: [codSes], references: [codSes])
+  pergunta PerguntaComportamental  @relation(fields: [codPer], references: [codPer])
+  escala   EscalaResposta          @relation(fields: [codEsc], references: [codEsc])
+
+  @@unique([codSes, codPer])
+  @@index([codTen, codSes])
+  @@map("TGPRESP")
+}
+
+/// Resultado consolidado (1:1 com sessão concluída). Nunca recalculado
+/// silenciosamente após mudança de regra (RN-GP-007).
+model ResultadoComportamental {
+  codResult             BigInt   @id @default(autoincrement()) @map("CODRESULT")
+  codTen                BigInt   @map("CODTEN")
+  codSes                BigInt   @unique @map("CODSES")
+  versaoAlgoritmo       String   @map("VERSAOALGORITMO")
+  versaoMod             Int      @map("VERSAOMOD")
+  indicadorConsistencia String   @map("INDICADORCONSISTENCIA")
+  percRespNeutras       Decimal  @map("PERCRESPNEUTRAS") @db.Decimal(5, 2)
+  percRespUniformes     Decimal  @map("PERCRESPUNIFORMES") @db.Decimal(5, 2)
+  tempoTotalSeg         Int?     @map("TEMPOTOTALSEG")
+  dhCalc                DateTime @default(now()) @map("DHCALC")
+
+  tenant     Tenant                          @relation(fields: [codTen], references: [codTen])
+  sessao     SessaoComportamental            @relation(fields: [codSes], references: [codSes])
+  fatores    ResultadoComportamentalFator[]
+  aderencias AderenciaComportamentalVaga[]
+  iaResumos  IAResumoComportamental[]
+
+  @@map("TGPRESULT")
+}
+
+/// Resultado × fator: bruto, mín/máx possível, percentual, média, desvio, faixa.
+model ResultadoComportamentalFator {
+  codResultFat          BigInt  @id @default(autoincrement()) @map("CODRESULTFAT")
+  codTen                BigInt  @map("CODTEN")
+  codResult             BigInt  @map("CODRESULT")
+  codFat                BigInt  @map("CODFAT")
+  pontuacaoBruta        Decimal @map("PONTUACAOBRUTA") @db.Decimal(8, 2)
+  minimoPossivel        Decimal @map("MINIMOPOSSIVEL") @db.Decimal(8, 2)
+  maximoPossivel        Decimal @map("MAXIMOPOSSIVEL") @db.Decimal(8, 2)
+  percentualNormalizado Decimal @map("PERCENTUALNORMALIZADO") @db.Decimal(5, 2)
+  media                 Decimal @map("MEDIA") @db.Decimal(5, 2)
+  desvio                Decimal @map("DESVIO") @db.Decimal(5, 2)
+  faixaInterpretativa   String  @map("FAIXAINTERPRETATIVA")
+
+  tenant    Tenant                  @relation(fields: [codTen], references: [codTen])
+  resultado ResultadoComportamental @relation(fields: [codResult], references: [codResult])
+  fator     FatorComportamental     @relation(fields: [codFat], references: [codFat])
+
+  @@unique([codResult, codFat])
+  @@map("TGPRESULTFAT")
+}
+
+/// Aderência à vaga (RN-GP-009 — nunca é probabilidade de sucesso profissional).
+model AderenciaComportamentalVaga {
+  codAderVag BigInt   @id @default(autoincrement()) @map("CODADERVAG")
+  codTen     BigInt   @map("CODTEN")
+  codResult  BigInt   @map("CODRESULT")
+  codPerVag  BigInt   @map("CODPERVAG")
+  aderenciaGeral Decimal @map("ADERENCIAGERAL") @db.Decimal(5, 2)
+  versao     String   @map("VERSAO")
+  dhCalc     DateTime @default(now()) @map("DHCALC")
+
+  tenant     Tenant                        @relation(fields: [codTen], references: [codTen])
+  resultado  ResultadoComportamental       @relation(fields: [codResult], references: [codResult])
+  perfilVaga PerfilComportamentalVaga      @relation(fields: [codPerVag], references: [codPerVag])
+  fatores    AderenciaComportamentalVagaFator[]
+
+  @@unique([codResult, codPerVag])
+  @@map("TGPADERVAG")
+}
+
+/// Aderência × fator: distância da faixa, aderência da dimensão, dentro/fora.
+model AderenciaComportamentalVagaFator {
+  codAderVagFat BigInt  @id @default(autoincrement()) @map("CODADERVAGFAT")
+  codTen        BigInt  @map("CODTEN")
+  codAderVag    BigInt  @map("CODADERVAG")
+  codFat        BigInt  @map("CODFAT")
+  distanciaFaixa     Decimal @map("DISTANCIAFAIXA") @db.Decimal(5, 2)
+  aderenciaDimensao  Decimal @map("ADERENCIADIMENSAO") @db.Decimal(5, 2)
+  dentroDaFaixa      String  @map("DENTRODAFAIXA") @db.Char(1)
+
+  tenant        Tenant                       @relation(fields: [codTen], references: [codTen])
+  aderenciaVaga AderenciaComportamentalVaga  @relation(fields: [codAderVag], references: [codAderVag])
+  fator         FatorComportamental          @relation(fields: [codFat], references: [codFat])
+
+  @@unique([codAderVag, codFat])
+  @@map("TGPADERVAGFAT")
+}
+
+/// Saída de IA (resumo executivo / perguntas de entrevista) — só explica
+/// resultado já calculado (RN-GP-006). Construída na última fase do módulo.
+model IAResumoComportamental {
+  codIaResumo  BigInt   @id @default(autoincrement()) @map("CODIARESUMO")
+  codTen       BigInt   @map("CODTEN")
+  codResult    BigInt   @map("CODRESULT")
+  tipo         String   @map("TIPO")
+  conteudoJson Json     @map("CONTEUDOJSON")
+  modeloUsado  String?  @map("MODELOUSADO")
+  versaoPrompt String?  @map("VERSAOPROMPT")
+  duracaoMs    Int?     @map("DURACAOMS")
+  status       String   @default("OK") @map("STATUS")
+  tentativas   Int      @default(1) @map("TENTATIVAS")
+  dhInc        DateTime @default(now()) @map("DHINC")
+
+  tenant    Tenant                  @relation(fields: [codTen], references: [codTen])
+  resultado ResultadoComportamental @relation(fields: [codResult], references: [codResult])
+
+  @@map("TGPIARESUMO")
 }
 
 // ===== Assinatura eletrônica de documentos (Core — TSX, exclusivo do SelexOps) =====
