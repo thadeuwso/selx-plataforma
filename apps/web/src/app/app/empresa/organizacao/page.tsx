@@ -34,7 +34,7 @@ function Aba({ ativa, aoClicar, children }: { ativa: boolean; aoClicar: () => vo
         background: "none",
         font: "inherit",
         fontWeight: ativa ? 600 : 400,
-        color: ativa ? "var(--text-default)" : "var(--text-muted)",
+        color: ativa ? "var(--text-body)" : "var(--text-muted)",
         cursor: "pointer",
       }}
     >

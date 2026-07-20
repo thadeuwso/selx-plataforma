@@ -50,7 +50,7 @@ const estiloEntrada: React.CSSProperties = {
   border: "1px solid var(--border-default)",
   borderRadius: 8,
   background: "var(--surface-default)",
-  color: "var(--text-default)",
+  color: "var(--text-body)",
   font: "inherit",
   width: "100%",
 };
@@ -63,7 +63,7 @@ export function Campo({
   children: ReactNode;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, color: "var(--text-default)" }}>
+    <label style={{ display: "grid", gap: 6, fontSize: 13, color: "var(--text-body)" }}>
       {rotulo}
       {children}
     </label>

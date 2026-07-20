@@ -57,7 +57,7 @@ export default function PaginaLogin() {
             Plataforma Inteligente de Gestão de Pessoas
           </div>
         </div>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, color: "var(--text-default)" }}>
+        <label style={{ display: "grid", gap: 6, fontSize: 13, color: "var(--text-body)" }}>
           E-mail
           <input
             type="email"
@@ -69,12 +69,12 @@ export default function PaginaLogin() {
               border: "1px solid var(--border-default)",
               borderRadius: 8,
               background: "var(--surface-default)",
-              color: "var(--text-default)",
+              color: "var(--text-body)",
               font: "inherit",
             }}
           />
         </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, color: "var(--text-default)" }}>
+        <label style={{ display: "grid", gap: 6, fontSize: 13, color: "var(--text-body)" }}>
           Senha
           <input
             type="password"
@@ -86,7 +86,7 @@ export default function PaginaLogin() {
               border: "1px solid var(--border-default)",
               borderRadius: 8,
               background: "var(--surface-default)",
-              color: "var(--text-default)",
+              color: "var(--text-body)",
               font: "inherit",
             }}
           />

@@ -72,7 +72,7 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
         gridTemplateColumns: "220px 1fr",
         background: "var(--surface-page)",
         fontFamily: "var(--font-sans)",
-        color: "var(--text-default)",
+        color: "var(--text-body)",
       }}
     >
       <aside
