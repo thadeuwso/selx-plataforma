@@ -5,6 +5,7 @@ import { DocumentosModule } from './core/documentos/documentos.module';
 import { EmpresasModule } from './core/empresas/empresas.module';
 import { FuncionariosModule } from './core/funcionarios/funcionarios.module';
 import { UsuariosModule } from './core/usuarios/usuarios.module';
+import { GestaoPessoasModule } from './gestao-pessoas/gestao-pessoas.module';
 import { RecrutamentoModule } from './recrutamento/recrutamento.module';
 import { PrismaModule } from './compartilhado/prisma/prisma.module';
 import { SaudeModule } from './compartilhado/saude/saude.module';
@@ -29,6 +30,7 @@ import { SaudeModule } from './compartilhado/saude/saude.module';
     FuncionariosModule,
     DocumentosModule,
     RecrutamentoModule,
+    GestaoPessoasModule,
   ],
 })
 export class AppModule {}

@@ -732,6 +732,83 @@ verificar(
   pipelineSemReq.json?.find((c) => c.codCdt === cdtSemRequisitos.json?.codCdt)?.match == null,
 );
 
+// 21. Gestão de Pessoas — Avaliação Comportamental (DIR/CON/SUS/PRE, sem IA)
+const vagaComp = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Comportamental" }, tokenA2);
+await http("PATCH", `/vagas/${vagaComp.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaComp.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+
+const perfilComp = await http("POST", `/vagas/${vagaComp.json?.codVag}/perfil-comportamental`, {
+  fatores: [
+    { sigla: "DIR", minimo: 60, maximo: 100, peso: 2, importancia: "ALTA" },
+    { sigla: "PRE", minimo: 40, maximo: 100, peso: 1 },
+  ],
+}, tokenA2);
+verificar("cria perfil comportamental da vaga (201)", perfilComp.status === 201 && !!perfilComp.json?.codPerVag);
+
+const perfilCompConsulta = await http("GET", `/vagas/${vagaComp.json?.codVag}/perfil-comportamental`, null, tokenA2);
+verificar(
+  "consulta perfil comportamental traz os 2 fatores configurados",
+  perfilCompConsulta.json?.fatores?.length === 2 && perfilCompConsulta.json.modelo?.nome === "Avaliação Comportamental Padrão",
+);
+
+const cdtComp = await http("POST", `/vagas/${vagaComp.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Fernanda Comportamental", email: `fernanda.comp.${rodada}@mail.com` },
+  codCanal: canalMatch.json?.codCanal,
+}, tokenA2);
+verificar("candidatura p/ teste comportamental (201)", cdtComp.status === 201);
+
+const conviteComp = await http("POST", `/candidaturas/${cdtComp.json?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
+verificar("gera convite com token público (201)", conviteComp.status === 201 && !!conviteComp.json?.tokenPub);
+const tokenComp = conviteComp.json?.tokenPub;
+
+const conviteCompDeNovo = await http("POST", `/candidaturas/${cdtComp.json?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
+verificar("reconvidar é idempotente (mesmo token)", conviteCompDeNovo.json?.tokenPub === tokenComp);
+
+const consultaCompInicial = await http("GET", `/avaliacao-comportamental/publico/${tokenComp}`);
+verificar(
+  "candidato consulta convite (sem login): 48 perguntas, sem consentimento ainda",
+  consultaCompInicial.status === 200 && consultaCompInicial.json?.perguntas?.length === 48 && consultaCompInicial.json?.consentimentoAceito === false,
+);
+
+const consentimentoComp = await http("POST", `/avaliacao-comportamental/publico/${tokenComp}/consentimento`, {});
+verificar("aceita termo de ciência (201)", consentimentoComp.status === 201 && !!consentimentoComp.json?.codSes);
+
+for (const p of consultaCompInicial.json.perguntas) {
+  const r = await http("POST", `/avaliacao-comportamental/publico/${tokenComp}/responder`, { codPer: p.codPer, valor: 5 });
+  if (r.status !== 201) verificar(`responde pergunta ${p.codPer} (201)`, false);
+}
+verificar("todas as 48 respostas salvas (autosave)", true);
+
+// Respondendo tudo com "5": cada fator tem 6 diretas (pontos=5) + 6 reversas (pontos=6-5=1) -> bruta=36,
+// min=12, max=60, percentual=(36-12)/(60-12)*100=50 — igual em todos os fatores (verificação determinística).
+const finalizarComp = await http("POST", `/avaliacao-comportamental/publico/${tokenComp}/finalizar`, {});
+verificar(
+  "finaliza: calcula os 4 fatores em 50% e a aderência ponderada esperada (93.33)",
+  finalizarComp.status === 201 &&
+    finalizarComp.json?.fatores?.length === 4 &&
+    finalizarComp.json.fatores.every((f) => f.percentualNormalizado === 50) &&
+    Math.abs(finalizarComp.json?.aderencia?.aderenciaGeral - 93.333) < 0.01,
+);
+verificar(
+  "respostas 100% uniformes → indicador de consistência sinaliza (não reprova)",
+  finalizarComp.json?.indicadorConsistencia === "BAIXA_CONSISTENCIA",
+);
+
+const finalizarCompDeNovo = await http("POST", `/avaliacao-comportamental/publico/${tokenComp}/finalizar`, {});
+verificar("finalizar de novo é bloqueado (já concluído) → 400", finalizarCompDeNovo.status === 400);
+
+const detalheComp = await http("GET", `/candidaturas/${cdtComp.json?.codCdt}/avaliacao-comportamental`, null, tokenA2);
+verificar(
+  "RH vê o resultado completo (fatores + aderência) pela candidatura",
+  detalheComp.status === 200 && detalheComp.json?.sessao?.resultado?.fatores?.length === 4 && detalheComp.json.sessao.resultado.aderencias?.length === 1,
+);
+
+const detalheCompIsolamento = await http("GET", `/candidaturas/${cdtComp.json?.codCdt}/avaliacao-comportamental`, null, tokenB);
+verificar("tenant B não acessa avaliação comportamental de candidatura do tenant A → 400", detalheCompIsolamento.status === 400);
+
+const tokenCompInvalido = await http("GET", "/avaliacao-comportamental/publico/token-inexistente-xyz");
+verificar("token de avaliação comportamental inválido → 400", tokenCompInvalido.status === 400);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);
