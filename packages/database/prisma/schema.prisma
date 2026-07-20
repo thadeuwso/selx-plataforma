@@ -473,6 +473,8 @@ model Vaga {
   tipoContrato  String?   @map("TIPOCONTRATO")
   codDep        BigInt?   @map("CODDEP")
   codCar        BigInt?   @map("CODCAR")
+  /// Perfil cultural ideal da vaga p/ match determinístico (RN-REC-006) — {autonomy,pace,collaboration,structure,dataDriven,directCommunication}, escala 1-5.
+  perfilCulturalIdealJson  Json?     @map("PERFILCULTURALIDEALJSON")
   dhInc         DateTime  @default(now()) @map("DHINC")
   codUsuInc     BigInt?   @map("CODUSUINC")
   dhAlt         DateTime  @updatedAt @map("DHALT")
@@ -500,6 +502,11 @@ model VagaRequisito {
   tipoReq   String   @default("OBRIGATORIO") @map("TIPOREQ")
   knockout  String   @default("N") @map("KNOCKOUT") @db.Char(1)
   ordem     Int      @default(1) @map("ORDEM")
+  /// Peso 0-10 no match determinístico (RN-REC-006).
+  peso              Int      @default(5) @map("PESO")
+  nivelEsperado     Int?     @map("NIVELESPERADO")
+  tempoEspMeses     Int?     @map("TEMPOESPMESES")
+  evidenciaExigida  String   @default("N") @map("EVIDENCIAEXIGIDA") @db.Char(1)
   dhInc     DateTime @default(now()) @map("DHINC")
 
   tenant Tenant @relation(fields: [codTen], references: [codTen])
@@ -579,6 +586,8 @@ model Candidato {
   linkedin  String?  @map("LINKEDIN")
   cidade    String?  @map("CIDADE")
   codUsu    BigInt?  @map("CODUSU")
+  /// Perfil cultural autoavaliado p/ match determinístico (RN-REC-006) — mesmo formato de Vaga.perfilCulturalIdealJson, reaproveitado entre candidaturas.
+  perfilCulturalJson  Json?  @map("PERFILCULTURALJSON")
   dhInc     DateTime @default(now()) @map("DHINC")
   codUsuInc BigInt?  @map("CODUSUINC")
   dhAlt     DateTime @updatedAt @map("DHALT")
@@ -621,6 +630,8 @@ model Candidatura {
   codFun        BigInt?  @map("CODFUN") // RN-REC-007: preenchido ao confirmar admissao no Core
   respostasJson Json?    @map("RESPOSTASJSON")
   knockoutJson  Json?    @map("KNOCKOUTJSON")
+  /// Autoavaliação por requisito p/ match determinístico (RN-REC-006) — mapa codVagReq -> {nivel,tempoMeses,evidenciaTexto}.
+  autoavaliacaoJson  Json?  @map("AUTOAVALIACAOJSON")
   dhInc         DateTime @default(now()) @map("DHINC")
   codUsuInc     BigInt?  @map("CODUSUINC")
   dhAlt         DateTime @updatedAt @map("DHALT")

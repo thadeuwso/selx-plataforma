@@ -5,6 +5,12 @@ import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard'
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
 import { FuncionariosService } from '../core/funcionarios/funcionarios.service';
+import {
+  calcularHashEntrada,
+  calcularMatch,
+  type AutoavaliacaoResp,
+  type PerfilCultural,
+} from './calcular-match';
 
 export const ESTAGIOS = [
   'applied', 'screening', 'analysis', 'knockout', 'shortlist', 'interview',
@@ -24,6 +30,14 @@ const esquemaCandidato = z.object({
   cgc: z.string().optional(),
   linkedin: z.string().optional(),
   cidade: z.string().optional(),
+  /** Perfil cultural autoavaliado p/ match determinístico (RN-REC-006) — 6 dimensões, escala 1-5. */
+  perfilCultural: z.record(z.string(), z.coerce.number().min(1).max(5)).optional(),
+});
+
+const esquemaAutoavaliacaoResp = z.object({
+  nivel: z.coerce.number().int().min(0).max(4).optional(),
+  tempoMeses: z.coerce.number().int().min(0).optional(),
+  evidenciaTexto: z.string().optional(),
 });
 
 const esquemaCandidatura = z.object({
@@ -31,6 +45,8 @@ const esquemaCandidatura = z.object({
   codCanal: z.coerce.bigint(),
   idExterno: z.string().optional(),
   respostas: z.record(z.string(), z.unknown()).optional(),
+  /** Autoavaliação por requisito (RN-REC-006), mapa codVagReq -> resposta. */
+  autoavaliacao: z.record(z.string(), esquemaAutoavaliacaoResp).optional(),
 });
 
 function validar<T extends z.ZodTypeAny>(esquema: T, corpo: unknown): z.infer<T> {
@@ -95,6 +111,7 @@ async function upsertCandidato(
   codUsu: bigint,
   dados: z.infer<typeof esquemaCandidato>,
 ) {
+  const { perfilCultural, ...dadosBasicos } = dados;
   const email = dados.email.toLowerCase();
   const existente = await tx.candidato.findFirst({
     where: {
@@ -112,6 +129,7 @@ async function upsertCandidato(
           cgc: dados.cgc ?? existente.cgc,
           linkedin: dados.linkedin ?? existente.linkedin,
           cidade: dados.cidade ?? existente.cidade,
+          perfilCulturalJson: (perfilCultural as Prisma.InputJsonValue) ?? existente.perfilCulturalJson ?? undefined,
           codUsuAlt: codUsu,
         },
       }),
@@ -120,7 +138,13 @@ async function upsertCandidato(
   }
   return {
     candidato: await tx.candidato.create({
-      data: { codTen, ...dados, email, codUsuInc: codUsu },
+      data: {
+        codTen,
+        ...dadosBasicos,
+        email,
+        perfilCulturalJson: perfilCultural as Prisma.InputJsonValue | undefined,
+        codUsuInc: codUsu,
+      },
     }),
     deduplicado: false,
   };
@@ -207,7 +231,7 @@ export class CandidatosController {
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
       const vaga = await tx.vaga.findFirst({
         where: { codVag: BigInt(codVag), ativo: 'S' },
-        include: { perguntas: true },
+        include: { perguntas: true, requisitos: true },
       });
       if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
       if (vaga.status !== 'ABERTA') {
@@ -258,9 +282,47 @@ export class CandidatosController {
           idExterno: dados.idExterno,
           respostasJson: (dados.respostas as Prisma.InputJsonValue) ?? undefined,
           knockoutJson: (sinal as unknown as Prisma.InputJsonValue) ?? undefined,
+          autoavaliacaoJson: (dados.autoavaliacao as Prisma.InputJsonValue) ?? undefined,
           codUsuInc: req.usuario.codUsu,
         },
       });
+
+      // RN-REC-006: match determinístico — calculado uma vez, na criação, sem IA.
+      const autoavaliacoes = (dados.autoavaliacao ?? {}) as Record<string, AutoavaliacaoResp>;
+      const perfilIdeal = (vaga.perfilCulturalIdealJson as PerfilCultural | null) ?? null;
+      const perfilCandidato = (candidato.perfilCulturalJson as PerfilCultural | null) ?? null;
+      const requisitosScoring = vaga.requisitos.map((r) => ({
+        codVagReq: r.codVagReq.toString(),
+        descrReq: r.descrReq,
+        tipoReq: r.tipoReq as 'OBRIGATORIO' | 'DESEJAVEL',
+        peso: r.peso,
+        nivelEsperado: r.nivelEsperado,
+        tempoEspMeses: r.tempoEspMeses,
+      }));
+      const resultadoMatch = calcularMatch({
+        requisitos: requisitosScoring,
+        autoavaliacoes,
+        perfilIdeal,
+        perfilCandidato,
+      });
+      if (resultadoMatch) {
+        const versaoMatch = 'v1';
+        await tx.matchResumo.create({
+          data: {
+            codTen: req.usuario.codTen,
+            codCdt: candidatura.codCdt,
+            versaoMatch,
+            ...resultadoMatch,
+            hashEntrada: calcularHashEntrada({
+              requisitos: requisitosScoring,
+              autoavaliacoes,
+              perfilIdeal,
+              perfilCandidato,
+              versaoMatch,
+            }),
+          },
+        });
+      }
       await tx.candidaturaHistorico.create({
         data: {
           codTen: req.usuario.codTen,
@@ -304,7 +366,9 @@ export class CandidatosController {
           knockoutJson: true,
           candidato: { select: { codCand: true, nomeCand: true, email: true, cidade: true } },
           canal: { select: { nomeCanal: true } },
-          match: { select: { scoreGeral: true } },
+          match: {
+            select: { scoreGeral: true, scoreContratacao: true, scoreCultura: true, driverPrincipal: true, qtdGapsCrit: true },
+          },
           processoAdmissao: { select: { status: true } },
         },
       }),

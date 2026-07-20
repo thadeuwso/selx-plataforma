@@ -650,6 +650,88 @@ verificar(
   pipelineComAdmissao.status === 200 && cdtNoPipeline?.codFun === aprovarAdmissao.json?.codFun,
 );
 
+// 20. RN-REC-006: match determinístico (sem IA — porte fiel do SelX 1.0)
+const vagaMatch = await http("POST", "/vagas", {
+  codEmp: cadA.json?.codEmp,
+  titulo: "Engenheiro de Dados Sênior",
+  requisitos: [
+    { descrReq: "SQL avançado", tipoReq: "OBRIGATORIO", peso: 8, nivelEsperado: 4, tempoEspMeses: 24 },
+    { descrReq: "Terraform", tipoReq: "DESEJAVEL", peso: 3, nivelEsperado: 2 },
+  ],
+  perfilCulturalIdeal: { autonomy: 4, pace: 3, collaboration: 5, structure: 3, dataDriven: 4, directCommunication: 5 },
+}, tokenA2);
+verificar("cria vaga p/ teste de match (201)", vagaMatch.status === 201);
+await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+
+const detalheMatch = await http("GET", `/vagas/${vagaMatch.json?.codVag}`, null, tokenA2);
+verificar(
+  "requisitos trazem peso/nível/tempo persistidos",
+  detalheMatch.json?.requisitos?.[0]?.peso === 8 && detalheMatch.json.requisitos[0].nivelEsperado === 4,
+);
+const [reqObrigatorio, reqDesejavel] = detalheMatch.json?.requisitos ?? [];
+
+const canalMatch = await http("POST", "/canais", { nomeCanal: "LinkedIn Match" }, tokenA2);
+
+// Candidata forte: nível/tempo/evidência batendo com o esperado + perfil cultural idêntico ao ideal
+const cdtForte = await http("POST", `/vagas/${vagaMatch.json?.codVag}/candidaturas`, {
+  candidato: {
+    nomeCand: "Beatriz Forte", email: `beatriz.${rodada}@mail.com`,
+    perfilCultural: { autonomy: 4, pace: 3, collaboration: 5, structure: 3, dataDriven: 4, directCommunication: 5 },
+  },
+  codCanal: canalMatch.json?.codCanal,
+  autoavaliacao: {
+    [reqObrigatorio?.codVagReq]: { nivel: 4, tempoMeses: 24, evidenciaTexto: "Liderei migração de pipelines SQL por 2 anos." },
+    [reqDesejavel?.codVagReq]: { nivel: 2, tempoMeses: 0, evidenciaTexto: "" },
+  },
+}, tokenA2);
+verificar("candidatura forte registrada (201)", cdtForte.status === 201);
+
+// Candidato fraco: reprova o obrigatório, sem perfil cultural
+const cdtFraco = await http("POST", `/vagas/${vagaMatch.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Carlos Fraco", email: `carlos.fraco.${rodada}@mail.com` },
+  codCanal: canalMatch.json?.codCanal,
+  autoavaliacao: {
+    [reqObrigatorio?.codVagReq]: { nivel: 1, tempoMeses: 3, evidenciaTexto: "" },
+    [reqDesejavel?.codVagReq]: { nivel: 0, tempoMeses: 0, evidenciaTexto: "" },
+  },
+}, tokenA2);
+verificar("candidatura fraca registrada (201)", cdtFraco.status === 201);
+
+const pipelineMatch = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas`, null, tokenA2);
+const matchForte = pipelineMatch.json?.find((c) => c.codCdt === cdtForte.json?.codCdt)?.match;
+const matchFraco = pipelineMatch.json?.find((c) => c.codCdt === cdtFraco.json?.codCdt)?.match;
+
+verificar(
+  "candidata forte: score geral alto, sem gap crítico, fit cultural perfeito",
+  matchForte?.scoreGeral >= 85 && matchForte?.qtdGapsCrit === 0 && matchForte?.scoreCultura === 100,
+);
+verificar(
+  "candidata forte: driver principal é o requisito mais forte (obrigatório)",
+  matchForte?.driverPrincipal === "SQL avançado",
+);
+verificar(
+  "candidato fraco: obrigatório reprovado gera gap crítico e derruba o score",
+  matchFraco?.qtdGapsCrit === 1 && matchFraco?.scoreGeral < 25 && matchFraco?.scoreGeral < matchForte?.scoreGeral,
+);
+verificar(
+  "candidato fraco sem perfil cultural → scoreCultura null, contratação ainda calculada",
+  matchFraco?.scoreCultura === null && typeof matchFraco?.scoreContratacao === "number",
+);
+
+const vagaSemRequisitos = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga sem requisitos" }, tokenA2);
+await http("PATCH", `/vagas/${vagaSemRequisitos.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaSemRequisitos.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtSemRequisitos = await http("POST", `/vagas/${vagaSemRequisitos.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Diego Sem Requisito", email: `diego.${rodada}@mail.com` },
+  codCanal: canalMatch.json?.codCanal,
+}, tokenA2);
+const pipelineSemReq = await http("GET", `/vagas/${vagaSemRequisitos.json?.codVag}/candidaturas`, null, tokenA2);
+verificar(
+  "vaga sem requisitos não gera match (nada a medir)",
+  pipelineSemReq.json?.find((c) => c.codCdt === cdtSemRequisitos.json?.codCdt)?.match == null,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

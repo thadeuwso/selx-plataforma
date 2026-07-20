@@ -24,6 +24,10 @@ const esquemaVaga = z.object({
         descrReq: z.string().min(2),
         tipoReq: z.enum(['OBRIGATORIO', 'DESEJAVEL']).default('OBRIGATORIO'),
         knockout: z.enum(['S', 'N']).default('N'),
+        peso: z.coerce.number().int().min(0).max(10).default(5),
+        nivelEsperado: z.coerce.number().int().min(0).max(4).optional(),
+        tempoEspMeses: z.coerce.number().int().min(0).optional(),
+        evidenciaExigida: z.enum(['S', 'N']).default('N'),
       }),
     )
     .default([]),
@@ -37,6 +41,8 @@ const esquemaVaga = z.object({
       }),
     )
     .default([]),
+  /** Perfil cultural ideal da vaga p/ match determinístico (RN-REC-006) — 6 dimensões, escala 1-5. */
+  perfilCulturalIdeal: z.record(z.string(), z.coerce.number().min(1).max(5)).optional(),
 });
 
 /**
@@ -134,9 +140,14 @@ export class VagasController {
       const empresa = await tx.empresa.findFirst({ where: { codEmp: dados.codEmp, ativo: 'S' } });
       if (!empresa) throw new BadRequestException('Empresa/filial inexistente neste tenant');
 
-      const { requisitos, perguntas, ...vagaDados } = dados;
+      const { requisitos, perguntas, perfilCulturalIdeal, ...vagaDados } = dados;
       const vaga = await tx.vaga.create({
-        data: { codTen: req.usuario.codTen, ...vagaDados, codUsuInc: req.usuario.codUsu },
+        data: {
+          codTen: req.usuario.codTen,
+          ...vagaDados,
+          perfilCulturalIdealJson: perfilCulturalIdeal,
+          codUsuInc: req.usuario.codUsu,
+        },
       });
       if (requisitos.length > 0) {
         await tx.vagaRequisito.createMany({

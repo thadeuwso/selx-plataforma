@@ -29,8 +29,20 @@ interface Requisito {
   descrReq: string;
   tipoReq: "OBRIGATORIO" | "DESEJAVEL";
   knockout: boolean;
+  peso: string;
+  nivelEsperado: string;
+  tempoEspMeses: string;
+  evidenciaExigida: boolean;
   origemIa: boolean;
 }
+const DIMENSOES_CULTURA = [
+  { chave: "autonomy", rotulo: "Autonomia" },
+  { chave: "pace", rotulo: "Ritmo" },
+  { chave: "collaboration", rotulo: "Colaboração" },
+  { chave: "structure", rotulo: "Estrutura" },
+  { chave: "dataDriven", rotulo: "Orientação a dados" },
+  { chave: "directCommunication", rotulo: "Comunicação direta" },
+] as const;
 interface Pergunta {
   pergunta: string;
   respElimina: "" | "Sim" | "Não";
@@ -90,6 +102,7 @@ export default function PaginaVagas() {
   });
   const [requisitos, setRequisitos] = useState<Requisito[]>([]);
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
+  const [perfilCulturalIdeal, setPerfilCulturalIdeal] = useState<Record<string, string>>({});
   const [textoIa, setTextoIa] = useState("");
   const [estruturando, setEstruturando] = useState(false);
   const [erroIa, setErroIa] = useState<string | null>(null);
@@ -125,6 +138,7 @@ export default function PaginaVagas() {
     setIaAplicada(false);
     setRequisitos([]);
     setPerguntas([]);
+    setPerfilCulturalIdeal({});
   }
 
   /** Cola a descrição bruta e estrutura com IA (AI Gateway) — nada é publicado sozinho, o RH revisa aqui. */
@@ -155,7 +169,16 @@ export default function PaginaVagas() {
       vlrSalMax: d.vlrSalMax != null ? String(d.vlrSalMax) : f.vlrSalMax,
     }));
     setRequisitos(
-      (d.requisitos ?? []).map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq, knockout: r.knockout, origemIa: true })),
+      (d.requisitos ?? []).map((r) => ({
+        descrReq: r.descrReq,
+        tipoReq: r.tipoReq,
+        knockout: r.knockout,
+        peso: "5",
+        nivelEsperado: "",
+        tempoEspMeses: "",
+        evidenciaExigida: false,
+        origemIa: true,
+      })),
     );
     setPerguntas(
       (d.perguntas ?? []).map((p) => ({ pergunta: p.pergunta, respElimina: "", origemIa: true })),
@@ -164,7 +187,10 @@ export default function PaginaVagas() {
   }
 
   function adicionarRequisito() {
-    setRequisitos((r) => [...r, { descrReq: "", tipoReq: "OBRIGATORIO", knockout: false, origemIa: false }]);
+    setRequisitos((r) => [
+      ...r,
+      { descrReq: "", tipoReq: "OBRIGATORIO", knockout: false, peso: "5", nivelEsperado: "", tempoEspMeses: "", evidenciaExigida: false, origemIa: false },
+    ]);
   }
   function removerRequisito(i: number) {
     setRequisitos((r) => r.filter((_, idx) => idx !== i));
@@ -201,10 +227,21 @@ export default function PaginaVagas() {
         codDep: form.codDep || undefined,
         requisitos: requisitos
           .filter((r) => r.descrReq.trim())
-          .map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq, knockout: r.knockout ? "S" : "N" })),
+          .map((r) => ({
+            descrReq: r.descrReq,
+            tipoReq: r.tipoReq,
+            knockout: r.knockout ? "S" : "N",
+            peso: r.peso ? Number(r.peso) : undefined,
+            nivelEsperado: r.nivelEsperado ? Number(r.nivelEsperado) : undefined,
+            tempoEspMeses: r.tempoEspMeses ? Number(r.tempoEspMeses) : undefined,
+            evidenciaExigida: r.evidenciaExigida ? "S" : "N",
+          })),
         perguntas: perguntas
           .filter((p) => p.pergunta.trim())
           .map((p) => ({ pergunta: p.pergunta, respElimina: p.respElimina || undefined })),
+        perfilCulturalIdeal: Object.fromEntries(
+          Object.entries(perfilCulturalIdeal).filter(([, v]) => v.trim()).map(([k, v]) => [k, Number(v)]),
+        ),
       },
     });
     setSalvando(false);
@@ -450,51 +487,107 @@ export default function PaginaVagas() {
                   key={i}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr auto auto auto",
-                    gap: 8,
-                    alignItems: "center",
+                    gap: 6,
                     padding: 8,
                     border: "1px solid var(--border-default)",
                     borderRadius: 8,
                   }}
                 >
-                  <Entrada
-                    value={r.descrReq}
-                    placeholder="Descrição do requisito"
-                    onChange={(e) => atualizarRequisito(i, { descrReq: e.target.value })}
-                    style={{ fontSize: 13 }}
-                  />
-                  <Selecao
-                    value={r.tipoReq}
-                    onChange={(e) => atualizarRequisito(i, { tipoReq: e.target.value as Requisito["tipoReq"] })}
-                    style={{ fontSize: 12, padding: "6px 8px" }}
-                  >
-                    <option value="OBRIGATORIO">Obrigatório</option>
-                    <option value="DESEJAVEL">Desejável</option>
-                  </Selecao>
-                  <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
-                    <input type="checkbox" checked={r.knockout} onChange={(e) => atualizarRequisito(i, { knockout: e.target.checked })} />
-                    Eliminatório
-                  </label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {r.origemIa && (
-                      <span
-                        title="Gerado pela IA"
-                        style={{ fontSize: 11, padding: "2px 6px", borderRadius: 999, background: "var(--brand-100)", color: "var(--brand-800)" }}
-                      >
-                        ✨ IA
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removerRequisito(i)}
-                      aria-label="Remover requisito"
-                      style={{ border: "none", background: "none", color: "var(--red-600, #9A3833)", cursor: "pointer", fontSize: 16 }}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 8, alignItems: "center" }}>
+                    <Entrada
+                      value={r.descrReq}
+                      placeholder="Descrição do requisito"
+                      onChange={(e) => atualizarRequisito(i, { descrReq: e.target.value })}
+                      style={{ fontSize: 13 }}
+                    />
+                    <Selecao
+                      value={r.tipoReq}
+                      onChange={(e) => atualizarRequisito(i, { tipoReq: e.target.value as Requisito["tipoReq"] })}
+                      style={{ fontSize: 12, padding: "6px 8px" }}
                     >
-                      ×
-                    </button>
+                      <option value="OBRIGATORIO">Obrigatório</option>
+                      <option value="DESEJAVEL">Desejável</option>
+                    </Selecao>
+                    <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                      <input type="checkbox" checked={r.knockout} onChange={(e) => atualizarRequisito(i, { knockout: e.target.checked })} />
+                      Eliminatório
+                    </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {r.origemIa && (
+                        <span
+                          title="Gerado pela IA"
+                          style={{ fontSize: 11, padding: "2px 6px", borderRadius: 999, background: "var(--brand-100)", color: "var(--brand-800)" }}
+                        >
+                          ✨ IA
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removerRequisito(i)}
+                        aria-label="Remover requisito"
+                        style={{ border: "none", background: "none", color: "var(--red-600, #9A3833)", cursor: "pointer", fontSize: 16 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "center" }}>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", display: "grid", gap: 2 }}>
+                      Peso (0-10, p/ match)
+                      <Entrada
+                        type="number" min={0} max={10}
+                        value={r.peso}
+                        onChange={(e) => atualizarRequisito(i, { peso: e.target.value })}
+                        style={{ fontSize: 12, padding: "4px 6px" }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", display: "grid", gap: 2 }}>
+                      Nível esperado (0-4)
+                      <Entrada
+                        type="number" min={0} max={4}
+                        value={r.nivelEsperado}
+                        onChange={(e) => atualizarRequisito(i, { nivelEsperado: e.target.value })}
+                        style={{ fontSize: 12, padding: "4px 6px" }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", display: "grid", gap: 2 }}>
+                      Tempo esperado (meses)
+                      <Entrada
+                        type="number" min={0}
+                        value={r.tempoEspMeses}
+                        onChange={(e) => atualizarRequisito(i, { tempoEspMeses: e.target.value })}
+                        style={{ fontSize: 12, padding: "4px 6px" }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                      <input
+                        type="checkbox"
+                        checked={r.evidenciaExigida}
+                        onChange={(e) => atualizarRequisito(i, { evidenciaExigida: e.target.checked })}
+                      />
+                      Pedir evidência
+                    </label>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Perfil cultural ideal da vaga</span>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "4px 0 8px" }}>
+              Escala 1-5 por dimensão. Opcional — alimenta o fit cultural do match determinístico (RN-REC-006).
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              {DIMENSOES_CULTURA.map((d) => (
+                <Campo key={d.chave} rotulo={d.rotulo}>
+                  <Entrada
+                    type="number" min={1} max={5}
+                    value={perfilCulturalIdeal[d.chave] ?? ""}
+                    onChange={(e) => setPerfilCulturalIdeal({ ...perfilCulturalIdeal, [d.chave]: e.target.value })}
+                  />
+                </Campo>
               ))}
             </div>
           </div>
