@@ -108,11 +108,12 @@ type ReqAut = Request & { usuario: UsuarioAutenticado };
 export class VagasController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Lista de vagas com KPIs agregados por vaga (RN-REC-011) — consultas agrupadas, sem N+1. */
   @Get()
   @Permissoes('recrutamento.vagas.ler')
   listar(@Req() req: ReqAut) {
-    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
-      tx.vaga.findMany({
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const vagas = await tx.vaga.findMany({
         where: { ativo: 'S' },
         orderBy: { codVag: 'desc' },
         select: {
@@ -124,13 +125,54 @@ export class VagasController {
           senioridade: true,
           modeloTrab: true,
           dhPub: true,
+          dhInc: true,
           empresa: { select: { codEmp: true, nomeFantasia: true } },
           departamento: { select: { descrDep: true } },
           cargo: { select: { nomeCar: true } },
-          _count: { select: { candidaturas: true } },
         },
-      }),
-    );
+      });
+
+      const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [porVagaEstagio, novosPorVaga, altaAderencia, aguardandoAval] = await Promise.all([
+        tx.candidatura.groupBy({ by: ['codVag', 'estagio'], where: { ativo: 'S' }, _count: true }),
+        tx.candidatura.groupBy({ by: ['codVag'], where: { ativo: 'S', dhInc: { gte: seteDiasAtras } }, _count: true }),
+        tx.candidatura.groupBy({ by: ['codVag'], where: { ativo: 'S', match: { scoreContratacao: { gte: 75 } } }, _count: true }),
+        tx.candidatura.groupBy({
+          by: ['codVag'],
+          where: { ativo: 'S', convitesComportamentais: { some: { sessao: { is: null } } } },
+          _count: true,
+        }),
+      ]);
+
+      const totalPorVaga = new Map<string, number>();
+      const entrevistasPorVaga = new Map<string, number>();
+      const propostasPorVaga = new Map<string, number>();
+      for (const g of porVagaEstagio) {
+        const k = g.codVag.toString();
+        totalPorVaga.set(k, (totalPorVaga.get(k) ?? 0) + g._count);
+        if (g.estagio === 'interview') entrevistasPorVaga.set(k, g._count);
+        if (g.estagio === 'offer') propostasPorVaga.set(k, g._count);
+      }
+      const mapa = (arr: { codVag: bigint; _count: number }[]) => new Map(arr.map((g) => [g.codVag.toString(), g._count]));
+      const novos = mapa(novosPorVaga);
+      const alta = mapa(altaAderencia);
+      const aguardando = mapa(aguardandoAval);
+
+      return vagas.map((v) => {
+        const k = v.codVag.toString();
+        const base = v.dhPub ?? v.dhInc;
+        return {
+          ...v,
+          totalCandidatos: totalPorVaga.get(k) ?? 0,
+          novos: novos.get(k) ?? 0,
+          altaAderencia: alta.get(k) ?? 0,
+          aguardandoAvaliacao: aguardando.get(k) ?? 0,
+          entrevistas: entrevistasPorVaga.get(k) ?? 0,
+          propostas: propostasPorVaga.get(k) ?? 0,
+          diasEmAberto: Math.floor((Date.now() - base.getTime()) / (24 * 60 * 60 * 1000)),
+        };
+      });
+    });
   }
 
   @Get(':codVag')
@@ -149,7 +191,31 @@ export class VagasController {
         },
       });
       if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
-      return vaga;
+
+      // KPIs da central da vaga (mesmos agregados da lista, só que pra uma vaga).
+      const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [porEstagio, novos, altaAderencia, aguardando] = await Promise.all([
+        tx.candidatura.groupBy({ by: ['estagio'], where: { codVag: vaga.codVag, ativo: 'S' }, _count: true }),
+        tx.candidatura.count({ where: { codVag: vaga.codVag, ativo: 'S', dhInc: { gte: seteDiasAtras } } }),
+        tx.candidatura.count({ where: { codVag: vaga.codVag, ativo: 'S', match: { scoreContratacao: { gte: 75 } } } }),
+        tx.candidatura.count({ where: { codVag: vaga.codVag, ativo: 'S', convitesComportamentais: { some: { sessao: { is: null } } } } }),
+      ]);
+      const total = porEstagio.reduce((s, g) => s + g._count, 0);
+      const porEtapa = (e: string) => porEstagio.find((g) => g.estagio === e)?._count ?? 0;
+      const base = vaga.dhPub ?? vaga.dhInc;
+
+      return {
+        ...vaga,
+        kpis: {
+          totalCandidatos: total,
+          novos,
+          altaAderencia,
+          aguardandoAvaliacao: aguardando,
+          entrevistas: porEtapa('interview'),
+          propostas: porEtapa('offer'),
+          diasEmAberto: Math.floor((Date.now() - base.getTime()) / (24 * 60 * 60 * 1000)),
+        },
+      };
     });
   }
 

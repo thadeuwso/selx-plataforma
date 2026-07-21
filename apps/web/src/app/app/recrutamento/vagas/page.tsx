@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
@@ -12,10 +12,17 @@ interface Vaga {
   local: string | null;
   senioridade: string | null;
   modeloTrab: string | null;
+  dhPub: string | null;
   empresa: { nomeFantasia: string };
   departamento: { descrDep: string } | null;
   cargo: { nomeCar: string } | null;
-  _count: { candidaturas: number };
+  totalCandidatos: number;
+  novos: number;
+  altaAderencia: number;
+  aguardandoAvaliacao: number;
+  entrevistas: number;
+  propostas: number;
+  diasEmAberto: number;
 }
 interface Opcao {
   codEmp?: string;
@@ -60,6 +67,8 @@ interface RespostaEstruturarIa {
 }
 
 const celula: React.CSSProperties = { padding: "10px 14px" };
+const cabecalho: React.CSSProperties = { padding: "10px 14px", fontWeight: 600, fontSize: 12, color: "var(--text-muted)" };
+const cabecalhoNum: React.CSSProperties = { ...cabecalho, textAlign: "right" };
 
 const CORES_STATUS: Record<string, { fundo: string; texto: string; rotulo: string }> = {
   RASCUNHO: { fundo: "var(--neutral-100)", texto: "var(--text-muted)", rotulo: "Rascunho" },
@@ -82,6 +91,7 @@ const ACOES_POR_STATUS: Record<string, { acao: string; rotulo: string }[]> = {
 };
 
 export default function PaginaVagas() {
+  const rotear = useRouter();
   const [vagas, setVagas] = useState<Vaga[]>([]);
   const [empresas, setEmpresas] = useState<Opcao[]>([]);
   const [cargos, setCargos] = useState<Opcao[]>([]);
@@ -266,94 +276,71 @@ export default function PaginaVagas() {
         <BotaoPrimario onClick={() => setAberta(true)}>Nova vaga</BotaoPrimario>
       </header>
 
-      <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+      <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 1040 }}>
           <thead>
             <tr style={{ background: "var(--surface-page)", textAlign: "left" }}>
-              <th style={{ ...celula, fontWeight: 600 }}>Título</th>
-              <th style={{ ...celula, fontWeight: 600 }}>Empresa</th>
-              <th style={{ ...celula, fontWeight: 600 }}>Cargo / Depto</th>
-              <th style={{ ...celula, fontWeight: 600 }}>Candidaturas</th>
-              <th style={{ ...celula, fontWeight: 600 }}>Status</th>
-              <th style={{ ...celula, fontWeight: 600 }}>Ações</th>
+              <th style={cabecalho}>Vaga</th>
+              <th style={cabecalho}>Depto / Local</th>
+              <th style={cabecalho}>Responsável</th>
+              <th style={cabecalhoNum}>Total</th>
+              <th style={cabecalhoNum}>Novos</th>
+              <th style={cabecalhoNum}>Alta ader.</th>
+              <th style={cabecalhoNum}>Aguard.</th>
+              <th style={cabecalhoNum}>Dias</th>
+              <th style={cabecalho}>Publicada</th>
+              <th style={cabecalho}>Status</th>
+              <th style={cabecalho}></th>
             </tr>
           </thead>
           <tbody>
             {vagas.map((v) => {
               const cor = CORES_STATUS[v.status] ?? CORES_STATUS.RASCUNHO;
               return (
-                <tr key={v.codVag} style={{ borderTop: "1px solid var(--border-default)" }}>
+                <tr
+                  key={v.codVag}
+                  onClick={() => rotear.push(`/app/recrutamento/vagas/${v.codVag}`)}
+                  style={{ borderTop: "1px solid var(--border-default)", cursor: "pointer" }}
+                >
                   <td style={celula}>
                     {v.urgente === "S" && <span title="Urgente" style={{ color: "var(--red-600)", marginRight: 6 }}>●</span>}
-                    {v.titulo}
+                    <span style={{ fontWeight: 600 }}>{v.titulo}</span>
                     <span style={{ color: "var(--text-muted)", fontSize: 12, display: "block" }}>
-                      {[v.senioridade, v.modeloTrab, v.local].filter(Boolean).join(" · ")}
+                      {[v.senioridade, v.modeloTrab].filter(Boolean).join(" · ")}
                     </span>
                   </td>
-                  <td style={{ ...celula, color: "var(--text-muted)" }}>{v.empresa?.nomeFantasia}</td>
-                  <td style={{ ...celula, color: "var(--text-muted)" }}>
-                    {[v.cargo?.nomeCar, v.departamento?.descrDep].filter(Boolean).join(" / ") || "—"}
+                  <td style={{ ...celula, color: "var(--text-muted)", fontSize: 13 }}>
+                    {[v.departamento?.descrDep, v.local].filter(Boolean).join(" · ") || "—"}
                   </td>
-                  <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{v._count?.candidaturas ?? 0}</td>
+                  <td style={{ ...celula, color: "var(--text-muted)" }}>—</td>
+                  <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{v.totalCandidatos}</td>
+                  <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums", color: v.novos > 0 ? "var(--text-body)" : "var(--text-muted)" }}>{v.novos}</td>
+                  <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums", color: v.altaAderencia > 0 ? "var(--green-700, #1D533B)" : "var(--text-muted)", fontWeight: v.altaAderencia > 0 ? 600 : 400 }}>{v.altaAderencia}</td>
+                  <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums", color: v.aguardandoAvaliacao > 0 ? "var(--amber-700, #714E08)" : "var(--text-muted)" }}>{v.aguardandoAvaliacao}</td>
+                  <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-muted)" }}>{v.diasEmAberto}</td>
+                  <td style={{ ...celula, color: "var(--text-muted)", fontSize: 13, whiteSpace: "nowrap" }}>{v.dhPub ? new Date(v.dhPub).toLocaleDateString("pt-BR") : "—"}</td>
                   <td style={celula}>
-                    <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, background: cor.fundo, color: cor.texto }}>
-                      {cor.rotulo}
-                    </span>
+                    <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, background: cor.fundo, color: cor.texto, whiteSpace: "nowrap" }}>{cor.rotulo}</span>
                   </td>
-                  <td style={{ ...celula, display: "flex", gap: 6, alignItems: "center" }}>
-                    <Link
-                      href={`/app/recrutamento/vagas/${v.codVag}`}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        border: "1px solid var(--border-default)",
-                        background: "var(--surface-page)",
-                        color: "var(--text-body)",
-                        fontSize: 12,
-                        textDecoration: "none",
-                      }}
-                    >
-                      Pipeline
-                    </Link>
-                    <Link
-                      href={`/app/recrutamento/vagas/${v.codVag}/configuracoes`}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        border: "1px solid var(--border-default)",
-                        background: "var(--surface-page)",
-                        color: "var(--text-body)",
-                        fontSize: 12,
-                        textDecoration: "none",
-                      }}
-                    >
-                      Configurações
-                    </Link>
-                    {(ACOES_POR_STATUS[v.status] ?? []).map((a) => (
-                      <button
-                        key={a.acao}
-                        onClick={() => transicionar(v.codVag, a.acao)}
-                        style={{
-                          padding: "4px 10px",
-                          borderRadius: 6,
-                          border: "1px solid var(--border-default)",
-                          background: "var(--surface-default)",
-                          color: "var(--text-body)",
-                          font: "inherit",
-                          fontSize: 12,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {a.rotulo}
-                      </button>
-                    ))}
+                  <td style={celula} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      {(ACOES_POR_STATUS[v.status] ?? []).map((a) => (
+                        <button
+                          key={a.acao}
+                          onClick={() => transicionar(v.codVag, a.acao)}
+                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", font: "inherit", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
+                        >
+                          {a.rotulo}
+                        </button>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               );
             })}
             {vagas.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ padding: 24, color: "var(--text-muted)", textAlign: "center" }}>
+                <td colSpan={11} style={{ padding: 24, color: "var(--text-muted)", textAlign: "center" }}>
                   Nenhuma vaga ainda — crie a primeira.
                 </td>
               </tr>

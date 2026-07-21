@@ -12,7 +12,6 @@ interface Funcionario {
 }
 interface Vaga {
   status: string;
-  _count: { candidaturas: number };
 }
 interface ProcessoAdmissao {
   codCdt: string;

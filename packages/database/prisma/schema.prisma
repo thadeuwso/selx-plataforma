@@ -601,6 +601,7 @@ model Candidato {
   cgc       String?  @map("CGC")
   linkedin  String?  @map("LINKEDIN")
   cidade    String?  @map("CIDADE")
+  cargoAtual String? @map("CARGOATUAL")
   codUsu    BigInt?  @map("CODUSU")
   /// Perfil cultural autoavaliado p/ match determinístico (RN-REC-006) — mesmo formato de Vaga.perfilCulturalIdealJson, reaproveitado entre candidaturas.
   perfilCulturalJson  Json?  @map("PERFILCULTURALJSON")

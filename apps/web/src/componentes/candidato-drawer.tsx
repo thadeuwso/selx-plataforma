@@ -211,6 +211,10 @@ export function CandidatoDrawer({
   const [iniciandoAdmissao, setIniciandoAdmissao] = useState(false);
   const [gerandoResumo, setGerandoResumo] = useState(false);
   const [gerandoPerguntas, setGerandoPerguntas] = useState(false);
+  const [anotacoes, setAnotacoes] = useState<EventoHistorico[] | null>(null);
+  const [novaNota, setNovaNota] = useState("");
+  const [salvandoNota, setSalvandoNota] = useState(false);
+  const [mudandoEstagio, setMudandoEstagio] = useState(false);
 
   const carregarDetalhe = useCallback(async () => {
     if (!codCdt) return;
@@ -224,6 +228,8 @@ export function CandidatoDrawer({
     setCurriculos(null);
     setComportamental(null);
     setHistorico(null);
+    setAnotacoes(null);
+    setNovaNota("");
     if (codCdt) void carregarDetalhe();
   }, [codCdt, carregarDetalhe]);
 
@@ -244,7 +250,32 @@ export function CandidatoDrawer({
         if (r.status === 200 && r.json) setHistorico(r.json);
       });
     }
-  }, [tab, codCdt, detalhe, curriculos, comportamental, historico]);
+    if (tab === "anotacoes" && anotacoes === null) {
+      void api<EventoHistorico[]>(`/candidaturas/${codCdt}/anotacoes`).then((r) => {
+        if (r.status === 200 && r.json) setAnotacoes(r.json);
+      });
+    }
+  }, [tab, codCdt, detalhe, curriculos, comportamental, historico, anotacoes]);
+
+  async function mudarEstagio(estagio: string) {
+    if (!codCdt) return;
+    setMudandoEstagio(true);
+    await api(`/candidaturas/${codCdt}/estagio`, { metodo: "PATCH", corpo: { estagio } });
+    setMudandoEstagio(false);
+    setHistorico(null);
+    await carregarDetalhe();
+    aoAtualizar();
+  }
+
+  async function adicionarNota() {
+    if (!codCdt || !novaNota.trim()) return;
+    setSalvandoNota(true);
+    const r = await api(`/candidaturas/${codCdt}/anotacoes`, { metodo: "POST", corpo: { nota: novaNota.trim() } });
+    setSalvandoNota(false);
+    if (r.status !== 201) { alert("Não foi possível salvar a anotação."); return; }
+    setNovaNota("");
+    setAnotacoes(null);
+  }
 
   async function enviarCurriculo(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
@@ -344,14 +375,32 @@ export function CandidatoDrawer({
             {detalhe.candidato.cidade && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{detalhe.candidato.cidade}</div>}
           </div>
 
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[
+              { estagio: "screening", rotulo: "Avançar p/ Triagem" },
+              { estagio: "interview", rotulo: "Marcar entrevista" },
+              { estagio: "not_selected", rotulo: "Reprovar" },
+            ].filter((a) => a.estagio !== detalhe.estagio).map((a) => (
+              <button
+                key={a.estagio}
+                onClick={() => mudarEstagio(a.estagio)}
+                disabled={mudandoEstagio}
+                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", font: "inherit" }}
+              >
+                {a.rotulo}
+              </button>
+            ))}
+          </div>
+
           <Abas
             ativa={tab}
             aoMudar={setTab}
             abas={[
-              { id: "perfil", rotulo: "Perfil" },
+              { id: "perfil", rotulo: "Resumo" },
               { id: "curriculo", rotulo: "Currículo" },
-              { id: "comportamental", rotulo: "Comportamental" },
+              { id: "comportamental", rotulo: "Avaliação" },
               { id: "historico", rotulo: "Histórico" },
+              { id: "anotacoes", rotulo: "Anotações" },
             ]}
           />
 
@@ -749,6 +798,39 @@ export function CandidatoDrawer({
                       {ev.rotuloPub ?? (ev.estagioNovo ? `${ev.estagioAnt ?? "—"} → ${ev.estagioNovo}` : ev.tipoEvento)}
                     </div>
                     {ev.notaInterna && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{ev.notaInterna}</div>}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === "anotacoes" && (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <textarea
+                  value={novaNota}
+                  onChange={(e) => setNovaNota(e.target.value)}
+                  rows={3}
+                  placeholder="Anotação interna sobre o candidato…"
+                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-default)", font: "inherit", fontSize: 13, resize: "vertical" }}
+                />
+                <button
+                  onClick={adicionarNota}
+                  disabled={salvandoNota || !novaNota.trim()}
+                  style={{ justifySelf: "start", padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 13, cursor: "pointer", font: "inherit", opacity: !novaNota.trim() ? 0.6 : 1 }}
+                >
+                  {salvandoNota ? "Salvando..." : "Adicionar anotação"}
+                </button>
+              </div>
+              {anotacoes === null ? (
+                <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Carregando...</p>
+              ) : anotacoes.length === 0 ? (
+                <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Nenhuma anotação ainda.</p>
+              ) : (
+                anotacoes.map((ev) => (
+                  <div key={ev.codCdtHis} style={{ border: "1px solid var(--border-default)", borderRadius: 8, padding: 10 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(ev.dhInc).toLocaleString("pt-BR")}</div>
+                    <div style={{ fontSize: 13, marginTop: 2 }}>{ev.notaInterna}</div>
                   </div>
                 ))
               )}

@@ -379,7 +379,7 @@ const cdtComRisco = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas
 verificar("resposta eliminatória → sinalizada (201)", cdtComRisco.status === 201 && cdtComRisco.json?.sinalizadoKnockout === true);
 
 const pipelineComSinal = await http("GET", `/vagas/${vaga.json?.codVag}/candidaturas`, null, tokenA2);
-const candidaturaSinalizada = pipelineComSinal.json?.find((c) => c.codCdt === cdtComRisco.json?.codCdt);
+const candidaturaSinalizada = pipelineComSinal.json?.itens?.find((c) => c.codCdt === cdtComRisco.json?.codCdt);
 verificar(
   "sinalizada continua em applied (não elimina de verdade) e mostra a pergunta",
   candidaturaSinalizada?.estagio === "applied" && candidaturaSinalizada?.knockoutJson?.pergunta === "Possui CNH categoria B?",
@@ -658,7 +658,7 @@ verificar(
 
 // 19. Pipeline expõe codFun/processoAdmissao (botão "Iniciar Admissão" no kanban)
 const pipelineComAdmissao = await http("GET", `/vagas/${vaga.json?.codVag}/candidaturas`, null, tokenA2);
-const cdtNoPipeline = pipelineComAdmissao.json?.find((c) => c.codCdt === cdtProc.json?.codCdt);
+const cdtNoPipeline = pipelineComAdmissao.json?.itens?.find((c) => c.codCdt === cdtProc.json?.codCdt);
 verificar(
   "pipeline mostra codFun após aprovação (candidatura já admitida)",
   pipelineComAdmissao.status === 200 && cdtNoPipeline?.codFun === aprovarAdmissao.json?.codFun,
@@ -713,8 +713,8 @@ const cdtFraco = await http("POST", `/vagas/${vagaMatch.json?.codVag}/candidatur
 verificar("candidatura fraca registrada (201)", cdtFraco.status === 201);
 
 const pipelineMatch = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas`, null, tokenA2);
-const matchForte = pipelineMatch.json?.find((c) => c.codCdt === cdtForte.json?.codCdt)?.match;
-const matchFraco = pipelineMatch.json?.find((c) => c.codCdt === cdtFraco.json?.codCdt)?.match;
+const matchForte = pipelineMatch.json?.itens?.find((c) => c.codCdt === cdtForte.json?.codCdt)?.match;
+const matchFraco = pipelineMatch.json?.itens?.find((c) => c.codCdt === cdtFraco.json?.codCdt)?.match;
 
 verificar(
   "candidata forte: score geral alto, sem gap crítico, fit cultural perfeito",
@@ -743,7 +743,7 @@ const cdtSemRequisitos = await http("POST", `/vagas/${vagaSemRequisitos.json?.co
 const pipelineSemReq = await http("GET", `/vagas/${vagaSemRequisitos.json?.codVag}/candidaturas`, null, tokenA2);
 verificar(
   "vaga sem requisitos não gera match (nada a medir)",
-  pipelineSemReq.json?.find((c) => c.codCdt === cdtSemRequisitos.json?.codCdt)?.match == null,
+  pipelineSemReq.json?.itens?.find((c) => c.codCdt === cdtSemRequisitos.json?.codCdt)?.match == null,
 );
 
 // 20b. Detalhe da candidatura (painel do candidato no pipeline redesenhado)
@@ -918,7 +918,7 @@ verificar(
 
 // Aderência calculada ao vivo contra o padrão quando a candidatura é de uma vaga sem perfil próprio
 const cdtsCfg = await http("GET", `/vagas/${vagaCfg.json?.codVag}/candidaturas`, null, tokenA2);
-const cdtCfg = cdtsCfg.json?.[0];
+const cdtCfg = cdtsCfg.json?.itens?.[0];
 const conviteCfg = await http("POST", `/candidaturas/${cdtCfg?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
 const tokenPubCfg = conviteCfg.json?.tokenPub;
 await http("POST", `/avaliacao-comportamental/publico/${tokenPubCfg}/consentimento`, {});
@@ -933,6 +933,72 @@ verificar(
   detalheCfgFinal.status === 200 &&
     detalheCfgFinal.json?.sessao?.resultado?.aderencias?.length === 0 &&
     detalheCfgFinal.json?.aderenciaPadrao?.aderenciaGeral != null,
+);
+
+// 23. Lista de candidaturas paginada/ordenada/filtrada no servidor (RN-REC-011)
+const listaPag = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas?pagina=1&tamanhoPagina=1&ordenar=prioridade`, null, tokenA2);
+verificar(
+  "lista de candidaturas responde paginada {itens,total,pagina,tamanhoPagina}",
+  listaPag.status === 200 && Array.isArray(listaPag.json?.itens) && typeof listaPag.json?.total === "number" &&
+    listaPag.json.itens.length === 1 && listaPag.json.total >= 2,
+);
+verificar(
+  "ordenação por prioridade: candidata forte vem primeiro (maior scoreContratacao)",
+  listaPag.json?.itens?.[0]?.codCdt === cdtForte.json?.codCdt,
+);
+
+const listaOrdAsc = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas?ordenar=aderencia_asc`, null, tokenA2);
+verificar(
+  "ordenação aderencia_asc: candidato fraco vem primeiro (menor scoreGeral)",
+  listaOrdAsc.json?.itens?.[0]?.codCdt === cdtFraco.json?.codCdt,
+);
+
+const listaFiltroEstagio = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas?estagio=applied`, null, tokenA2);
+verificar(
+  "filtro por estágio traz só o estágio pedido",
+  listaFiltroEstagio.status === 200 && listaFiltroEstagio.json?.itens?.every((c) => c.estagio === "applied"),
+);
+
+const listaBusca = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas?busca=Beatriz`, null, tokenA2);
+verificar(
+  "busca textual filtra por nome",
+  listaBusca.status === 200 && listaBusca.json?.itens?.length === 1 && listaBusca.json.itens[0].codCdt === cdtForte.json?.codCdt,
+);
+
+const listaAderMin = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas?aderenciaMin=50`, null, tokenA2);
+verificar(
+  "filtro aderenciaMin=50 exclui o candidato fraco",
+  listaAderMin.status === 200 && !listaAderMin.json?.itens?.some((c) => c.codCdt === cdtFraco.json?.codCdt),
+);
+
+// 24. Ação em massa: mover estágio em lote
+const loteMover = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/candidaturas/mover-estagio-lote`, {
+  codCdts: [cdtForte.json?.codCdt, cdtFraco.json?.codCdt], estagio: "screening",
+}, tokenA2);
+verificar("mover estágio em lote move as duas candidaturas", loteMover.status === 200 && loteMover.json?.movidas === 2);
+const listaAposLote = await http("GET", `/vagas/${vagaMatch.json?.codVag}/candidaturas?estagio=screening`, null, tokenA2);
+verificar("as duas candidaturas estão no novo estágio após o lote", listaAposLote.json?.itens?.length === 2);
+const loteOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/candidaturas/mover-estagio-lote`, {
+  codCdts: [cdtForte.json?.codCdt], estagio: "shortlist",
+}, tokenB);
+verificar("tenant B não move candidaturas do tenant A em lote (0 encontradas)", loteOutroTenant.status === 200 && loteOutroTenant.json?.encontradas === 0);
+
+// 25. Anotações do recrutador (timeline com tipoEvento='anotacao')
+const criaAnotacao = await http("POST", `/candidaturas/${cdtForte.json?.codCdt}/anotacoes`, { nota: "Ótimo fit técnico, agendar conversa." }, tokenA2);
+verificar("cria anotação (201)", criaAnotacao.status === 201 && criaAnotacao.json?.tipoEvento === "anotacao");
+const listaAnotacoes = await http("GET", `/candidaturas/${cdtForte.json?.codCdt}/anotacoes`, null, tokenA2);
+verificar(
+  "lista anotações traz só as anotações (não a timeline inteira)",
+  listaAnotacoes.status === 200 && listaAnotacoes.json?.length === 1 && listaAnotacoes.json[0].notaInterna.includes("fit técnico"),
+);
+
+// 26. KPIs agregados na lista de vagas
+const vagasComKpi = await http("GET", "/vagas", null, tokenA2);
+const vagaMatchKpi = vagasComKpi.json?.find((v) => v.codVag === vagaMatch.json?.codVag);
+verificar(
+  "lista de vagas traz KPIs agregados (total/novos/altaAderencia/diasEmAberto)",
+  vagasComKpi.status === 200 && vagaMatchKpi?.totalCandidatos === 2 && vagaMatchKpi?.novos === 2 &&
+    typeof vagaMatchKpi?.altaAderencia === "number" && typeof vagaMatchKpi?.diasEmAberto === "number",
 );
 
 // Resultado

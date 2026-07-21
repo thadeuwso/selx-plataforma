@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
@@ -18,6 +18,30 @@ export const ESTAGIOS = [
   'offer', 'approved', 'not_selected', 'rejected', 'hired', 'archived',
 ] as const;
 
+const ORDENACOES = ['prioridade', 'aderencia_desc', 'aderencia_asc', 'recentes', 'antigos', 'nome', 'etapa'] as const;
+
+const esquemaListaCandidaturas = z.object({
+  pagina: z.coerce.number().int().min(1).default(1),
+  tamanhoPagina: z.coerce.number().int().min(1).max(200).default(50),
+  ordenar: z.enum(ORDENACOES).default('prioridade'),
+  estagio: z.string().optional(),
+  busca: z.string().optional(),
+  aderenciaMin: z.coerce.number().min(0).max(100).optional(),
+  aderenciaMax: z.coerce.number().min(0).max(100).optional(),
+});
+
+function ordenarPorParaOrderBy(ordenar: (typeof ORDENACOES)[number]): Prisma.CandidaturaOrderByWithRelationInput {
+  switch (ordenar) {
+    case 'prioridade': return { match: { scoreContratacao: 'desc' } };
+    case 'aderencia_desc': return { match: { scoreGeral: 'desc' } };
+    case 'aderencia_asc': return { match: { scoreGeral: 'asc' } };
+    case 'recentes': return { dhInc: 'desc' };
+    case 'antigos': return { dhInc: 'asc' };
+    case 'nome': return { candidato: { nomeCand: 'asc' } };
+    case 'etapa': return { estagio: 'asc' };
+  }
+}
+
 const esquemaCanal = z.object({
   nomeCanal: z.string().min(2),
   tipoCanal: z.enum(['conector', 'importacao', 'manual']).default('manual'),
@@ -31,6 +55,7 @@ const esquemaCandidato = z.object({
   cgc: z.string().optional(),
   linkedin: z.string().optional(),
   cidade: z.string().optional(),
+  cargoAtual: z.string().optional(),
   /** Perfil cultural autoavaliado p/ match determinístico (RN-REC-006) — 6 dimensões, escala 1-5. */
   perfilCultural: z.record(z.string(), z.coerce.number().min(1).max(5)).optional(),
 });
@@ -130,6 +155,7 @@ async function upsertCandidato(
           cgc: dados.cgc ?? existente.cgc,
           linkedin: dados.linkedin ?? existente.linkedin,
           cidade: dados.cidade ?? existente.cidade,
+          cargoAtual: dados.cargoAtual ?? existente.cargoAtual,
           perfilCulturalJson: (perfilCultural as Prisma.InputJsonValue) ?? existente.perfilCulturalJson ?? undefined,
           codUsuAlt: codUsu,
         },
@@ -356,47 +382,83 @@ export class CandidatosController {
     });
   }
 
+  /**
+   * Lista paginada/ordenada/filtrada no servidor (RN-REC-011) — antes trazia
+   * tudo de uma vez, o que não escala pra vagas com centenas de candidaturas.
+   * Usada tanto pela lista principal (página inteira) quanto pelo Kanban
+   * (uma chamada por coluna, filtrando por `estagio`).
+   */
   @Get('vagas/:codVag/candidaturas')
   @Permissoes('recrutamento.candidatos.ler')
-  listarCandidaturas(@Req() req: ReqAut, @Param('codVag') codVag: string) {
-    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
-      tx.candidatura.findMany({
-        where: { codVag: BigInt(codVag), ativo: 'S' },
-        orderBy: { codCdt: 'asc' },
-        select: {
-          codCdt: true,
-          estagio: true,
-          dhInc: true,
-          codFun: true,
-          knockoutJson: true,
-          candidato: { select: { codCand: true, nomeCand: true, email: true, cidade: true } },
-          canal: { select: { nomeCanal: true } },
-          match: {
-            select: { scoreGeral: true, scoreContratacao: true, scoreCultura: true, driverPrincipal: true, qtdGapsCrit: true },
+  async listarCandidaturas(@Req() req: ReqAut, @Param('codVag') codVag: string, @Query() query: unknown) {
+    const dados = validar(esquemaListaCandidaturas, query);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const where: Prisma.CandidaturaWhereInput = { codVag: BigInt(codVag), ativo: 'S' };
+      if (dados.estagio) {
+        const estagios = dados.estagio.split(',').map((e) => e.trim());
+        where.estagio = estagios.length === 1 ? estagios[0] : { in: estagios };
+      }
+      if (dados.busca) {
+        where.candidato = {
+          OR: [
+            { nomeCand: { contains: dados.busca, mode: 'insensitive' } },
+            { email: { contains: dados.busca, mode: 'insensitive' } },
+          ],
+        };
+      }
+      if (dados.aderenciaMin != null || dados.aderenciaMax != null) {
+        where.match = {
+          scoreContratacao: {
+            ...(dados.aderenciaMin != null ? { gte: dados.aderenciaMin } : {}),
+            ...(dados.aderenciaMax != null ? { lte: dados.aderenciaMax } : {}),
           },
-          processoAdmissao: { select: { status: true } },
-          convitesComportamentais: {
-            orderBy: { codConv: 'desc' },
-            take: 1,
-            select: {
-              tokenPub: true,
-              status: true,
-              sessao: {
-                select: {
-                  dhConclusao: true,
-                  resultado: {
-                    select: {
-                      indicadorConsistencia: true,
-                      aderencias: { select: { aderenciaGeral: true }, take: 1 },
+        };
+      }
+
+      const [itens, total] = await Promise.all([
+        tx.candidatura.findMany({
+          where,
+          orderBy: ordenarPorParaOrderBy(dados.ordenar),
+          skip: (dados.pagina - 1) * dados.tamanhoPagina,
+          take: dados.tamanhoPagina,
+          select: {
+            codCdt: true,
+            estagio: true,
+            dhInc: true,
+            codFun: true,
+            knockoutJson: true,
+            candidato: { select: { codCand: true, nomeCand: true, email: true, cidade: true, cargoAtual: true } },
+            canal: { select: { nomeCanal: true } },
+            match: {
+              select: { scoreGeral: true, scoreContratacao: true, scoreCultura: true, driverPrincipal: true, qtdGapsCrit: true },
+            },
+            processoAdmissao: { select: { status: true } },
+            convitesComportamentais: {
+              orderBy: { codConv: 'desc' },
+              take: 1,
+              select: {
+                tokenPub: true,
+                status: true,
+                sessao: {
+                  select: {
+                    dhConclusao: true,
+                    resultado: {
+                      select: {
+                        indicadorConsistencia: true,
+                        aderencias: { select: { aderenciaGeral: true }, take: 1 },
+                      },
                     },
                   },
                 },
               },
             },
           },
-        },
-      }),
-    );
+        }),
+        tx.candidatura.count({ where }),
+      ]);
+
+      return { itens, total, pagina: dados.pagina, tamanhoPagina: dados.tamanhoPagina };
+    });
   }
 
   /** Detalhe completo de uma candidatura — alimenta o painel de detalhe do candidato no pipeline. */
@@ -480,6 +542,43 @@ export class CandidatosController {
         },
       });
       return atualizada;
+    });
+  }
+
+  /** Ações em massa (mover etapa/reprovar/arquivar são a mesma rota, só muda o estágio-alvo). */
+  @Patch('vagas/:codVag/candidaturas/mover-estagio-lote')
+  @Permissoes('recrutamento.candidatos.criar')
+  moverEstagioLote(@Req() req: ReqAut, @Param('codVag') codVag: string, @Body() corpo: unknown) {
+    const dados = validar(
+      z.object({ codCdts: z.array(z.coerce.bigint()).min(1).max(500), estagio: z.enum(ESTAGIOS), nota: z.string().optional() }),
+      corpo,
+    );
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const candidaturas = await tx.candidatura.findMany({
+        where: { codCdt: { in: dados.codCdts }, codVag: BigInt(codVag), ativo: 'S' },
+      });
+      let movidas = 0;
+      for (const cdt of candidaturas) {
+        if (cdt.estagio === dados.estagio) continue;
+        await tx.candidatura.update({
+          where: { codCdt: cdt.codCdt },
+          data: { estagio: dados.estagio, codUsuAlt: req.usuario.codUsu },
+        });
+        await tx.candidaturaHistorico.create({
+          data: {
+            codTen: req.usuario.codTen,
+            codCdt: cdt.codCdt,
+            tipoEvento: 'mudanca_estagio',
+            estagioAnt: cdt.estagio,
+            estagioNovo: dados.estagio,
+            notaInterna: dados.nota,
+            tipoAtor: 'usuario',
+            codUsuInc: req.usuario.codUsu,
+          },
+        });
+        movidas++;
+      }
+      return { encontradas: candidaturas.length, movidas };
     });
   }
 
@@ -576,5 +675,37 @@ export class CandidatosController {
         orderBy: { codCdtHis: 'asc' },
       }),
     );
+  }
+
+  /** Anotações do recrutador — sem tabela nova, é a mesma timeline com tipoEvento='anotacao'. */
+  @Get('candidaturas/:codCdt/anotacoes')
+  @Permissoes('recrutamento.candidatos.ler')
+  listarAnotacoes(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.candidaturaHistorico.findMany({
+        where: { codCdt: BigInt(codCdt), tipoEvento: 'anotacao' },
+        orderBy: { codCdtHis: 'desc' },
+      }),
+    );
+  }
+
+  @Post('candidaturas/:codCdt/anotacoes')
+  @Permissoes('recrutamento.candidatos.criar')
+  criarAnotacao(@Req() req: ReqAut, @Param('codCdt') codCdt: string, @Body() corpo: unknown) {
+    const dados = validar(z.object({ nota: z.string().min(1) }), corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cdt = await tx.candidatura.findFirst({ where: { codCdt: BigInt(codCdt), ativo: 'S' } });
+      if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
+      return tx.candidaturaHistorico.create({
+        data: {
+          codTen: req.usuario.codTen,
+          codCdt: cdt.codCdt,
+          tipoEvento: 'anotacao',
+          notaInterna: dados.nota,
+          tipoAtor: 'usuario',
+          codUsuInc: req.usuario.codUsu,
+        },
+      });
+    });
   }
 }
