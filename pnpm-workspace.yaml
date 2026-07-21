@@ -9,4 +9,6 @@ allowBuilds:
   "@prisma/engines": true
   prisma: true
   sharp: true
-  unrs-resolver: set this to true or false
+  # Resolver nativo do ESLint. O lint roda sem o binário compilado (verificado),
+  # então não há motivo para executar script de build na instalação.
+  unrs-resolver: false

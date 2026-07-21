@@ -30,8 +30,8 @@ def test_purpose_nao_registrado():
     assert r.status_code == 422
 
 
-def test_ia_desabilitada_e_estado_de_primeira_classe():
-    r = cliente.post(
+def _pedido_diagnostico():
+    return cliente.post(
         "/v1/ia/gerar",
         json={
             "purpose": "plataforma.diagnostico@v1",
@@ -39,8 +39,43 @@ def test_ia_desabilitada_e_estado_de_primeira_classe():
             "mensagens": [{"papel": "user", "conteudo": "diagnóstico"}],
         },
     )
+
+
+def test_ia_desabilitada_e_estado_de_primeira_classe(monkeypatch):
+    # `AI_PROVIDER` explicitamente vazio, não "por acaso ausente": este teste
+    # passava só porque nada carregava o `.env` da aplicação. Quando o carregamento
+    # foi corrigido, ele quebrou — dependia do bug para ficar verde.
+    monkeypatch.setenv("AI_PROVIDER", "")
+    r = _pedido_diagnostico()
     assert r.status_code == 503
     assert r.json()["detail"]["codigo"] == "IA_DESABILITADA"
+
+
+def test_provedor_configurado_passa_do_portao_de_desabilitado(monkeypatch):
+    """O outro lado da mesma regra.
+
+    Provar que sem provedor a IA degrada é metade do teste; a outra metade é que
+    **com** provedor a requisição avança. Usa-se um adapter inexistente de
+    propósito: chega-se ao roteamento (PROVEDOR_INDISPONIVEL) sem chamada de rede
+    nem custo.
+    """
+    monkeypatch.setenv("AI_PROVIDER", "provedor-de-mentira")
+    r = _pedido_diagnostico()
+    assert r.status_code == 503
+    assert r.json()["detail"]["codigo"] == "PROVEDOR_INDISPONIVEL"
+
+
+def test_saude_expoe_se_o_provedor_esta_configurado(monkeypatch):
+    """`/health` respondia 200 mesmo sem provedor — o serviço parecia no ar e só
+    falhava na hora de usar. Agora a configuração aparece no health."""
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-teste")
+    corpo = cliente.get("/health").json()
+    assert corpo["provedor"] == "openai" and corpo["provedorConfigurado"] is True
+
+    monkeypatch.setenv("AI_PROVIDER", "")
+    corpo = cliente.get("/health").json()
+    assert corpo["ok"] is True and corpo["provedorConfigurado"] is False
 
 
 def test_esquema_saida_sem_validacao_retorna_string():
