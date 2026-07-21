@@ -3,10 +3,12 @@ import { AvaliacaoComportamentalController } from './avaliacao-comportamental.co
 import { AvaliacaoComportamentalPublicoController } from './avaliacao-comportamental-publico.controller';
 import { IaComportamentalController } from './ia-comportamental.controller';
 import { PerfilComportamentalController } from './perfil-comportamental.controller';
+import { PerfilComportamentalPadraoController } from './perfil-comportamental-padrao.controller';
 
 @Module({
   controllers: [
     PerfilComportamentalController,
+    PerfilComportamentalPadraoController,
     AvaliacaoComportamentalController,
     AvaliacaoComportamentalPublicoController,
     IaComportamentalController,

@@ -127,6 +127,10 @@ interface DetalheComportamental {
       iaResumos: { tipo: string; conteudoJson: unknown }[];
     } | null;
   } | null;
+  aderenciaPadrao: {
+    aderenciaGeral: number;
+    fatores: { fator: { sigla: string; nome: string }; distanciaFaixa: number; aderenciaDimensao: number; dentroDaFaixa: string }[];
+  } | null;
 }
 
 interface RespostaResumoIa {
@@ -353,6 +357,16 @@ export function CandidatoDrawer({
 
           {tab === "perfil" && (
             <div style={{ display: "grid", gap: 16 }}>
+              {!detalhe.knockoutJson &&
+                !detalhe.match &&
+                detalhe.requisitosAvaliados.length === 0 &&
+                !detalhe.vaga.perfilCulturalIdealJson &&
+                !detalhe.candidato.perfilCulturalJson &&
+                detalhe.estagio !== "hired" && (
+                  <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                    Sem dados de match ou perfil cultural — esta vaga não tem requisitos configurados.
+                  </p>
+                )}
               {detalhe.knockoutJson && (
                 <div
                   style={{
@@ -551,7 +565,8 @@ export function CandidatoDrawer({
               ) : (
                 (() => {
                   const resultado = comportamental.sessao.resultado;
-                  const aderenciaVaga = resultado.aderencias[0];
+                  const aderenciaVaga = resultado.aderencias[0] ?? comportamental.aderenciaPadrao ?? undefined;
+                  const aderenciaViaPadrao = !resultado.aderencias[0] && !!comportamental.aderenciaPadrao;
                   const facetas = [...comportamental.facetas].sort((a, b) => b.percentualNormalizado - a.percentualNormalizado);
                   const maiorForca = facetas[0];
                   const maiorAtencao = facetas[facetas.length - 1];
@@ -573,7 +588,10 @@ export function CandidatoDrawer({
 
                       {aderenciaVaga && (
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Aderência geral à vaga</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                            Aderência geral à vaga
+                            {aderenciaViaPadrao && <span style={{ fontWeight: 400, color: "var(--text-muted)" }}> (via padrão da empresa)</span>}
+                          </div>
                           <div style={{ fontSize: 28, fontWeight: 700 }}>{aderenciaVaga.aderenciaGeral}</div>
                         </div>
                       )}

@@ -315,6 +315,20 @@ export default function PaginaVagas() {
                     >
                       Pipeline
                     </Link>
+                    <Link
+                      href={`/app/recrutamento/vagas/${v.codVag}/configuracoes`}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        border: "1px solid var(--border-default)",
+                        background: "var(--surface-page)",
+                        color: "var(--text-body)",
+                        fontSize: 12,
+                        textDecoration: "none",
+                      }}
+                    >
+                      Configurações
+                    </Link>
                     {(ACOES_POR_STATUS[v.status] ?? []).map((a) => (
                       <button
                         key={a.acao}

@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import { randomBytes } from 'node:crypto';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
-import { calcularResultadoPorFaceta, type RespostaFaceta } from './calcular-resultado';
+import { calcularAderenciaVaga, calcularResultadoPorFaceta, type PerfilVagaFator, type RespostaFaceta } from './calcular-resultado';
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 
@@ -94,7 +94,47 @@ export class AvaliacaoComportamentalController {
       }));
       const facetas = calcularResultadoPorFaceta(respostasFaceta);
 
-      return { ...convite, facetas };
+      // Fallback de aderência (RN-GP-009): se a vaga não tem perfil próprio configurado
+      // (aderencias vazio), calcula ao vivo contra o padrão do tenant — nunca persiste,
+      // mesmo padrão de "facetas" acima (só a aderência vaga-específica é persistida em TGPADERVAG).
+      let aderenciaPadrao = null;
+      if (convite.sessao.resultado.aderencias.length === 0) {
+        const padrao = await tx.perfilComportamentalPadrao.findFirst({
+          where: { ativo: 'S' },
+          include: { fatores: { include: { fator: true } } },
+        });
+        if (padrao && padrao.fatores.length > 0) {
+          const perfilFatores: PerfilVagaFator[] = padrao.fatores.map((pf) => ({
+            codFat: pf.fator.sigla,
+            minimo: pf.minimo,
+            maximo: pf.maximo,
+            peso: Number(pf.peso),
+            eliminatorio: pf.eliminatorio === 'S',
+          }));
+          const resultadoFatores = convite.sessao.resultado.fatores.map((rf) => ({
+            codFat: rf.fator.sigla,
+            pontuacaoBruta: Number(rf.pontuacaoBruta),
+            minimoPossivel: Number(rf.minimoPossivel),
+            maximoPossivel: Number(rf.maximoPossivel),
+            percentualNormalizado: Number(rf.percentualNormalizado),
+            media: Number(rf.media),
+            desvio: Number(rf.desvio),
+            faixaInterpretativa: rf.faixaInterpretativa,
+          }));
+          const aderencia = calcularAderenciaVaga(resultadoFatores, perfilFatores);
+          aderenciaPadrao = {
+            aderenciaGeral: aderencia.aderenciaGeral,
+            fatores: aderencia.fatores.map((af) => ({
+              fator: { sigla: af.codFat, nome: padrao.fatores.find((pf) => pf.fator.sigla === af.codFat)!.fator.nome },
+              distanciaFaixa: af.distanciaFaixa,
+              aderenciaDimensao: af.aderenciaDimensao,
+              dentroDaFaixa: af.dentroDaFaixa ? 'S' : 'N',
+            })),
+          };
+        }
+      }
+
+      return { ...convite, facetas, aderenciaPadrao };
     });
   }
 }

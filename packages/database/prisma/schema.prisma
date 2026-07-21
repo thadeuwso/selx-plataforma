@@ -71,6 +71,8 @@ model Tenant {
   aderenciasComportamentaisVaga AderenciaComportamentalVaga[]
   aderenciasComportamentaisVagaFatores AderenciaComportamentalVagaFator[]
   iaResumosComportamentais IAResumoComportamental[]
+  perfisComportamentaisPadrao PerfilComportamentalPadrao[]
+  perfisComportamentaisPadraoFatores PerfilComportamentalPadraoFator[]
 
   @@map("TSXTEN")
 }
@@ -519,6 +521,7 @@ model VagaRequisito {
   nivelEsperado     Int?     @map("NIVELESPERADO")
   tempoEspMeses     Int?     @map("TEMPOESPMESES")
   evidenciaExigida  String   @default("N") @map("EVIDENCIAEXIGIDA") @db.Char(1)
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
   dhInc     DateTime @default(now()) @map("DHINC")
 
   tenant Tenant @relation(fields: [codTen], references: [codTen])
@@ -537,6 +540,7 @@ model VagaPergunta {
   obrigatoria String   @default("S") @map("OBRIGATORIA") @db.Char(1)
   respElimina String?  @map("RESPELIMINA")
   ordem       Int      @default(1) @map("ORDEM")
+  ativo       String   @default("S") @map("ATIVO") @db.Char(1)
   dhInc       DateTime @default(now()) @map("DHINC")
 
   tenant Tenant @relation(fields: [codTen], references: [codTen])
@@ -749,6 +753,7 @@ model FatorComportamental {
 
   perguntas          PerguntaComportamental[]
   perfilVagaFatores  PerfilComportamentalVagaFator[]
+  perfilPadraoFatores PerfilComportamentalPadraoFator[]
   resultadoFatores   ResultadoComportamentalFator[]
   aderenciaFatores   AderenciaComportamentalVagaFator[]
 
@@ -865,6 +870,46 @@ model PerfilComportamentalVagaFator {
 
   @@unique([codPerVag, codFat])
   @@map("TGPPERVAGFAT")
+}
+
+/// Perfil comportamental padrão do tenant — fallback quando a vaga não tem
+/// perfil próprio configurado (RN-GP-008, extensão 2026-07-21). Só a faixa por
+/// fator: a escolha de MODELO (questionário) já tem seu próprio fallback (o
+/// modelo padrão publicado), resolvido em avaliacao-comportamental.controller.ts.
+model PerfilComportamentalPadrao {
+  codPerPad BigInt   @id @default(autoincrement()) @map("CODPERPAD")
+  codTen    BigInt   @map("CODTEN")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+
+  tenant  Tenant                             @relation(fields: [codTen], references: [codTen])
+  fatores PerfilComportamentalPadraoFator[]
+
+  @@index([codTen])
+  @@map("TGPPERPAD")
+}
+
+/// Perfil padrão × fator: mesma forma de TGPPERVAGFAT, sem vínculo de vaga.
+model PerfilComportamentalPadraoFator {
+  codPerPadFat BigInt  @id @default(autoincrement()) @map("CODPERPADFAT")
+  codTen       BigInt  @map("CODTEN")
+  codPerPad    BigInt  @map("CODPERPAD")
+  codFat       BigInt  @map("CODFAT")
+  minimo       Int     @map("MINIMO")
+  maximo       Int     @map("MAXIMO")
+  peso         Decimal @default(1.0) @map("PESO") @db.Decimal(3, 2)
+  importancia  String  @default("MEDIA") @map("IMPORTANCIA")
+  eliminatorio String  @default("N") @map("ELIMINATORIO") @db.Char(1)
+  justificativa String? @map("JUSTIFICATIVA")
+  tolerancia   Int?    @map("TOLERANCIA")
+
+  tenant     Tenant                      @relation(fields: [codTen], references: [codTen])
+  perfilPad  PerfilComportamentalPadrao  @relation(fields: [codPerPad], references: [codPerPad])
+  fator      FatorComportamental         @relation(fields: [codFat], references: [codFat])
+
+  @@unique([codPerPad, codFat])
+  @@map("TGPPERPADFAT")
 }
 
 /// Convite (token opaco público — ADR-0004 §5, mesmo padrão de Admissão Digital).

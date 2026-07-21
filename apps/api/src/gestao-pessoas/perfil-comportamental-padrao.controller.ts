@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
@@ -32,49 +32,33 @@ function validar<T extends z.ZodTypeAny>(esquema: T, corpo: unknown): z.infer<T>
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 
-/** Perfil comportamental desejado da vaga (RN-GP-008) — faixa por fator, nunca um perfil "universal". */
-@Controller('vagas/:codVag/perfil-comportamental')
-export class PerfilComportamentalController {
+/**
+ * Perfil comportamental PADRÃO do tenant (RN-GP-008, extensão 2026-07-21) —
+ * usado como fallback quando uma vaga específica não tem perfil próprio.
+ * Mesmo padrão de substituição (ATIVO=N, nunca UPDATE parcial) de
+ * `perfil-comportamental.controller.ts`, sem vínculo de vaga nem de modelo
+ * (a escolha de questionário já tem seu próprio fallback, separado).
+ */
+@Controller('gestao-pessoas/perfil-comportamental-padrao')
+export class PerfilComportamentalPadraoController {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Perfil da vaga; se não houver, cai no padrão do tenant (`herdadoDoPadrao: true`). */
   @Get()
   @Permissoes('gestaopessoas.avaliacoes.ler')
-  async consultar(@Req() req: ReqAut, @Param('codVag') codVag: string) {
-    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const perfilVaga = await tx.perfilComportamentalVaga.findFirst({
-        where: { codVag: BigInt(codVag), ativo: 'S' },
-        include: {
-          modelo: { select: { codMod: true, nome: true, versao: true } },
-          fatores: { include: { fator: true } },
-        },
-      });
-      if (perfilVaga) return { ...perfilVaga, herdadoDoPadrao: false };
-
-      const padrao = await tx.perfilComportamentalPadrao.findFirst({
+  consultar(@Req() req: ReqAut) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.perfilComportamentalPadrao.findFirst({
         where: { ativo: 'S' },
         include: { fatores: { include: { fator: true } } },
-      });
-      if (!padrao) return null;
-      return { ...padrao, herdadoDoPadrao: true };
-    });
+      }),
+    );
   }
 
-  /** Substitui o perfil ativo por um novo (histórico preservado via ATIVO=N, nunca UPDATE parcial). */
   @Post()
   @Permissoes('gestaopessoas.avaliacoes.criar')
-  configurar(@Req() req: ReqAut, @Param('codVag') codVag: string, @Body() corpo: unknown) {
+  configurar(@Req() req: ReqAut, @Body() corpo: unknown) {
     const dados = validar(esquemaPerfil, corpo);
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const vaga = await tx.vaga.findFirst({ where: { codVag: BigInt(codVag), ativo: 'S' } });
-      if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
-
-      const modeloPadrao = await tx.modeloAvaliacaoComportamental.findFirst({
-        where: { status: 'PUBLICADO' },
-        orderBy: { versao: 'desc' },
-      });
-      if (!modeloPadrao) throw new BadRequestException('Nenhum modelo de avaliação comportamental publicado');
-
       const fatores = await tx.fatorComportamental.findMany({
         where: { sigla: { in: dados.fatores.map((f) => f.sigla) } },
       });
@@ -83,20 +67,18 @@ export class PerfilComportamentalController {
         if (!fatorPorSigla.has(f.sigla)) throw new BadRequestException(`Fator ${f.sigla} inexistente`);
       }
 
-      const existente = await tx.perfilComportamentalVaga.findFirst({
-        where: { codVag: vaga.codVag, ativo: 'S' },
-      });
+      const existente = await tx.perfilComportamentalPadrao.findFirst({ where: { ativo: 'S' } });
       if (existente) {
-        await tx.perfilComportamentalVaga.update({ where: { codPerVag: existente.codPerVag }, data: { ativo: 'N' } });
+        await tx.perfilComportamentalPadrao.update({ where: { codPerPad: existente.codPerPad }, data: { ativo: 'N' } });
       }
 
-      const perfil = await tx.perfilComportamentalVaga.create({
-        data: { codTen: req.usuario.codTen, codVag: vaga.codVag, codMod: modeloPadrao.codMod, codUsuInc: req.usuario.codUsu },
+      const perfil = await tx.perfilComportamentalPadrao.create({
+        data: { codTen: req.usuario.codTen, codUsuInc: req.usuario.codUsu },
       });
-      await tx.perfilComportamentalVagaFator.createMany({
+      await tx.perfilComportamentalPadraoFator.createMany({
         data: dados.fatores.map((f) => ({
           codTen: req.usuario.codTen,
-          codPerVag: perfil.codPerVag,
+          codPerPad: perfil.codPerPad,
           codFat: fatorPorSigla.get(f.sigla)!.codFat,
           minimo: f.minimo,
           maximo: f.maximo,
@@ -107,7 +89,7 @@ export class PerfilComportamentalController {
           tolerancia: f.tolerancia,
         })),
       });
-      return { codPerVag: perfil.codPerVag };
+      return { codPerPad: perfil.codPerPad };
     });
   }
 }

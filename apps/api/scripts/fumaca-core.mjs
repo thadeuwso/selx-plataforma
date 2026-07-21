@@ -840,6 +840,101 @@ verificar("tenant B não acessa avaliação comportamental de candidatura do ten
 const tokenCompInvalido = await http("GET", "/avaliacao-comportamental/publico/token-inexistente-xyz");
 verificar("token de avaliação comportamental inválido → 400", tokenCompInvalido.status === 400);
 
+// 22. Configurações da vaga (editar depois de criada) + Perfil Comportamental Padrão da empresa
+const vagaCfg = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Configurações" }, tokenA2);
+verificar("cria vaga p/ teste de configurações (201)", vagaCfg.status === 201);
+
+const cfgAdiciona = await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/configuracoes`, {
+  requisitos: [{ descrReq: "Excel avançado", tipoReq: "OBRIGATORIO", peso: 6 }],
+  perguntas: [{ pergunta: "Tem CNH categoria B?", respElimina: "Não" }],
+}, tokenA2);
+verificar("adiciona requisito/pergunta antes de ter candidatura (200)", cfgAdiciona.status === 200 && !cfgAdiciona.json?.bloqueadoPorCandidatura);
+
+const vagaCfgDetalhe1 = await http("GET", `/vagas/${vagaCfg.json?.codVag}`, null, tokenA2);
+verificar(
+  "requisito/pergunta persistidos",
+  vagaCfgDetalhe1.json?.requisitos?.length === 1 && vagaCfgDetalhe1.json?.perguntas?.length === 1,
+);
+
+const cfgRemoveLivre = await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/configuracoes`, { requisitos: [], perguntas: [] }, tokenA2);
+const vagaCfgDetalhe2 = await http("GET", `/vagas/${vagaCfg.json?.codVag}`, null, tokenA2);
+verificar(
+  "sem candidatura: remoção livre funciona (requisito/pergunta somem)",
+  cfgRemoveLivre.status === 200 && vagaCfgDetalhe2.json?.requisitos?.length === 0 && vagaCfgDetalhe2.json?.perguntas?.length === 0,
+);
+
+// Recoloca um requisito, aprova a vaga e registra uma candidatura — agora a remoção deve ser bloqueada
+await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/configuracoes`, {
+  requisitos: [{ descrReq: "Excel avançado", tipoReq: "OBRIGATORIO", peso: 6 }],
+}, tokenA2);
+await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+await http("POST", `/vagas/${vagaCfg.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Fabio Config", email: `fabio.config.${rodada}@mail.com` },
+  codCanal: canalMatch.json?.codCanal,
+}, tokenA2);
+
+const vagaCfgComCdt = await http("GET", `/vagas/${vagaCfg.json?.codVag}`, null, tokenA2);
+const reqExistente = vagaCfgComCdt.json?.requisitos?.[0];
+const cfgTentaRemover = await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/configuracoes`, { requisitos: [] }, tokenA2);
+const vagaCfgDetalhe3 = await http("GET", `/vagas/${vagaCfg.json?.codVag}`, null, tokenA2);
+verificar(
+  "com candidatura: requisito existente é mantido (não removido), aviso sinalizado",
+  cfgTentaRemover.status === 200 &&
+    cfgTentaRemover.json?.bloqueadoPorCandidatura === true &&
+    cfgTentaRemover.json?.avisos?.length === 1 &&
+    vagaCfgDetalhe3.json?.requisitos?.length === 1,
+);
+
+const cfgEditaExistente = await http("PATCH", `/vagas/${vagaCfg.json?.codVag}/configuracoes`, {
+  requisitos: [{ codVagReq: reqExistente.codVagReq, descrReq: "Excel avançado", tipoReq: "OBRIGATORIO", peso: 9 }],
+}, tokenA2);
+const vagaCfgDetalhe4 = await http("GET", `/vagas/${vagaCfg.json?.codVag}`, null, tokenA2);
+verificar(
+  "com candidatura: editar peso de requisito existente funciona",
+  cfgEditaExistente.status === 200 && vagaCfgDetalhe4.json?.requisitos?.[0]?.peso === 9,
+);
+
+// Perfil Comportamental Padrão da empresa (fallback quando a vaga não tem perfil próprio)
+const padraoAntes = await http("GET", "/vagas/" + vagaCfg.json?.codVag + "/perfil-comportamental", null, tokenA2);
+verificar("sem padrão e sem perfil de vaga: consulta retorna null", padraoAntes.status === 200 && padraoAntes.json === null);
+
+const criaPadrao = await http("POST", "/gestao-pessoas/perfil-comportamental-padrao", {
+  fatores: [{ sigla: "DIR", minimo: 50, maximo: 100, peso: 1 }],
+}, tokenA2);
+verificar("cria perfil comportamental padrão da empresa (201)", criaPadrao.status === 201 && !!criaPadrao.json?.codPerPad);
+
+const consultaComPadrao = await http("GET", `/vagas/${vagaCfg.json?.codVag}/perfil-comportamental`, null, tokenA2);
+verificar(
+  "vaga sem perfil próprio herda o padrão da empresa",
+  consultaComPadrao.status === 200 && consultaComPadrao.json?.herdadoDoPadrao === true && consultaComPadrao.json?.fatores?.length === 1,
+);
+
+const consultaVagaComPerfilProprio = await http("GET", `/vagas/${vagaComp.json?.codVag}/perfil-comportamental`, null, tokenA2);
+verificar(
+  "vaga com perfil próprio NÃO herda o padrão (herdadoDoPadrao false)",
+  consultaVagaComPerfilProprio.status === 200 && consultaVagaComPerfilProprio.json?.herdadoDoPadrao === false,
+);
+
+// Aderência calculada ao vivo contra o padrão quando a candidatura é de uma vaga sem perfil próprio
+const cdtsCfg = await http("GET", `/vagas/${vagaCfg.json?.codVag}/candidaturas`, null, tokenA2);
+const cdtCfg = cdtsCfg.json?.[0];
+const conviteCfg = await http("POST", `/candidaturas/${cdtCfg?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
+const tokenPubCfg = conviteCfg.json?.tokenPub;
+await http("POST", `/avaliacao-comportamental/publico/${tokenPubCfg}/consentimento`, {});
+const consultaCfg = await http("GET", `/avaliacao-comportamental/publico/${tokenPubCfg}`);
+for (const p of consultaCfg.json.perguntas) {
+  await http("POST", `/avaliacao-comportamental/publico/${tokenPubCfg}/responder`, { codPer: p.codPer, valor: 5 });
+}
+await http("POST", `/avaliacao-comportamental/publico/${tokenPubCfg}/finalizar`, {});
+const detalheCfgFinal = await http("GET", `/candidaturas/${cdtCfg?.codCdt}/avaliacao-comportamental`, null, tokenA2);
+verificar(
+  "vaga sem perfil próprio: aderência calculada ao vivo contra o padrão (aderenciaPadrao)",
+  detalheCfgFinal.status === 200 &&
+    detalheCfgFinal.json?.sessao?.resultado?.aderencias?.length === 0 &&
+    detalheCfgFinal.json?.aderenciaPadrao?.aderenciaGeral != null,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

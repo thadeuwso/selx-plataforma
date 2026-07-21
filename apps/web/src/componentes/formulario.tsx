@@ -128,8 +128,8 @@ export function Abas({
             color: a.id === ativa ? "var(--text-body)" : "var(--text-muted)",
             fontWeight: a.id === ativa ? 600 : 400,
             fontSize: 13,
+            fontFamily: "inherit",
             cursor: "pointer",
-            font: "inherit",
             marginBottom: -1,
           }}
         >

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -95,18 +96,6 @@ interface DetalheComportamental {
   } | null;
 }
 
-interface PerfilComportamentalFator {
-  fator: { sigla: string };
-  minimo: number;
-  maximo: number;
-  peso: number;
-  importancia: string;
-  eliminatorio: string;
-}
-interface PerfilComportamental {
-  codPerVag: string;
-  fatores: PerfilComportamentalFator[];
-}
 interface Vaga {
   codVag: string;
   titulo: string;
@@ -291,42 +280,20 @@ export default function PipelineVaga() {
   const [respostas, setRespostas] = useState<Record<string, string>>({});
   const [autoavaliacao, setAutoavaliacao] = useState<Record<string, { nivel: string; tempoMeses: string; evidenciaTexto: string }>>({});
   const [perfilCultural, setPerfilCultural] = useState<Record<string, string>>({});
-  const [perfilComportamental, setPerfilComportamental] = useState<PerfilComportamental | null>(null);
-  const [perfilAberta, setPerfilAberta] = useState(false);
-  const [salvandoPerfil, setSalvandoPerfil] = useState(false);
-  const [perfilForm, setPerfilForm] = useState<
-    Record<string, { incluir: boolean; minimo: string; maximo: string; eliminatorio: boolean }>
-  >({});
   const [drawerCodCdt, setDrawerCodCdt] = useState<string | null>(null);
   const [selecionadosComparar, setSelecionadosComparar] = useState<string[]>([]);
   const [comparacao, setComparacao] = useState<{ nomeCand: string; dados: DetalheComportamental }[] | null>(null);
   const [carregandoComparacao, setCarregandoComparacao] = useState(false);
 
   const carregar = useCallback(async () => {
-    const [v, c, ca, p] = await Promise.all([
+    const [v, c, ca] = await Promise.all([
       api<Vaga>(`/vagas/${codVag}`),
       api<Candidatura[]>(`/vagas/${codVag}/candidaturas`),
       api<Canal[]>("/canais"),
-      api<PerfilComportamental | null>(`/vagas/${codVag}/perfil-comportamental`),
     ]);
     if (v.status === 200 && v.json) setVaga(v.json);
     if (c.status === 200 && c.json) setCandidaturas(c.json);
     if (ca.status === 200 && ca.json) setCanais(ca.json);
-    if (p.status === 200) {
-      setPerfilComportamental(p.json);
-      if (p.json) {
-        const preenchido: typeof perfilForm = {};
-        for (const f of p.json.fatores) {
-          preenchido[f.fator.sigla] = {
-            incluir: true,
-            minimo: String(f.minimo),
-            maximo: String(f.maximo),
-            eliminatorio: f.eliminatorio === "S",
-          };
-        }
-        setPerfilForm(preenchido);
-      }
-    }
   }, [codVag]);
 
   useEffect(() => {
@@ -372,28 +339,6 @@ export default function PipelineVaga() {
       .map((r, i) => (r.status === 200 && r.json ? { nomeCand: selecionados[i].candidato.nomeCand, dados: r.json } : null))
       .filter((x): x is { nomeCand: string; dados: DetalheComportamental } => x !== null);
     setComparacao(dados);
-  }
-
-  async function salvarPerfilComportamental(e: React.FormEvent) {
-    e.preventDefault();
-    setSalvandoPerfil(true);
-    const fatores = FATORES_COMPORTAMENTAIS.filter((f) => perfilForm[f.sigla]?.incluir).map((f) => {
-      const v = perfilForm[f.sigla];
-      return {
-        sigla: f.sigla,
-        minimo: Number(v.minimo || 0),
-        maximo: Number(v.maximo || 100),
-        eliminatorio: v.eliminatorio ? "S" : "N",
-      };
-    });
-    const r = await api(`/vagas/${codVag}/perfil-comportamental`, { metodo: "POST", corpo: { fatores } });
-    setSalvandoPerfil(false);
-    if (r.status !== 201) {
-      alert("Não foi possível salvar o perfil comportamental.");
-      return;
-    }
-    setPerfilAberta(false);
-    await carregar();
   }
 
   async function candidatar(e: React.FormEvent) {
@@ -452,20 +397,22 @@ export default function PipelineVaga() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => setPerfilAberta(true)}
+          <Link
+            href={`/app/recrutamento/vagas/${codVag}/configuracoes`}
             style={{
               padding: "10px 14px",
               borderRadius: 8,
               border: "1px solid var(--border-default)",
               background: "var(--surface-default)",
+              color: "var(--text-body)",
               fontSize: 14,
-              cursor: "pointer",
-              font: "inherit",
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
             }}
           >
-            Perfil comportamental{perfilComportamental && " ✓"}
-          </button>
+            Configurações da vaga
+          </Link>
           <BotaoPrimario onClick={() => setAberta(true)} disabled={vaga.status !== "ABERTA"}>
             Nova candidatura
           </BotaoPrimario>
@@ -654,43 +601,6 @@ export default function PipelineVaga() {
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
             {salvando ? "Registrando..." : "Registrar candidatura"}
-          </BotaoPrimario>
-        </form>
-      </Gaveta>
-
-      <Gaveta titulo="Perfil comportamental da vaga" aberta={perfilAberta} fechar={() => setPerfilAberta(false)}>
-        <form onSubmit={salvarPerfilComportamental} style={{ display: "grid", gap: 14 }}>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-            Faixa desejada (0-100) por fator. Marque só os fatores relevantes para esta vaga — os demais ficam de fora da aderência.
-          </p>
-          {FATORES_COMPORTAMENTAIS.map((f) => {
-            const v = perfilForm[f.sigla] ?? { incluir: false, minimo: "", maximo: "", eliminatorio: false };
-            const atualizar = (patch: Partial<typeof v>) => setPerfilForm({ ...perfilForm, [f.sigla]: { ...v, ...patch } });
-            return (
-              <div key={f.sigla} style={{ border: "1px solid var(--border-default)", borderRadius: 8, padding: 10 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
-                  <input type="checkbox" checked={v.incluir} onChange={(e) => atualizar({ incluir: e.target.checked })} />
-                  {f.rotulo}
-                </label>
-                {v.incluir && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-                    <Campo rotulo="Mínimo">
-                      <Entrada type="number" min={0} max={100} value={v.minimo} onChange={(e) => atualizar({ minimo: e.target.value })} />
-                    </Campo>
-                    <Campo rotulo="Máximo">
-                      <Entrada type="number" min={0} max={100} value={v.maximo} onChange={(e) => atualizar({ maximo: e.target.value })} />
-                    </Campo>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, gridColumn: "1 / -1" }}>
-                      <input type="checkbox" checked={v.eliminatorio} onChange={(e) => atualizar({ eliminatorio: e.target.checked })} />
-                      Fora da faixa elimina o candidato
-                    </label>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          <BotaoPrimario type="submit" disabled={salvandoPerfil}>
-            {salvandoPerfil ? "Salvando..." : "Salvar perfil comportamental"}
           </BotaoPrimario>
         </form>
       </Gaveta>

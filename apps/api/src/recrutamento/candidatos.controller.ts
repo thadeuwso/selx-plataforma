@@ -236,7 +236,7 @@ export class CandidatosController {
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
       const vaga = await tx.vaga.findFirst({
         where: { codVag: BigInt(codVag), ativo: 'S' },
-        include: { perguntas: true, requisitos: true },
+        include: { perguntas: { where: { ativo: 'S' } }, requisitos: { where: { ativo: 'S' } } },
       });
       if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
       if (vaga.status !== 'ABERTA') {

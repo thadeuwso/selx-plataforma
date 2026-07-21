@@ -45,6 +45,29 @@ const esquemaVaga = z.object({
   perfilCulturalIdeal: z.record(z.string(), z.coerce.number().min(1).max(5)).optional(),
 });
 
+const esquemaRequisitoConfig = z.object({
+  codVagReq: z.coerce.bigint().optional(),
+  descrReq: z.string().min(2),
+  tipoReq: z.enum(['OBRIGATORIO', 'DESEJAVEL']).default('OBRIGATORIO'),
+  knockout: z.enum(['S', 'N']).default('N'),
+  peso: z.coerce.number().int().min(0).max(10).default(5),
+  nivelEsperado: z.coerce.number().int().min(0).max(4).optional(),
+  tempoEspMeses: z.coerce.number().int().min(0).optional(),
+  evidenciaExigida: z.enum(['S', 'N']).default('N'),
+});
+const esquemaPerguntaConfig = z.object({
+  codVagPer: z.coerce.bigint().optional(),
+  pergunta: z.string().min(3),
+  tipoResp: z.enum(['SIM_NAO', 'TEXTO', 'NUMERO']).default('SIM_NAO'),
+  obrigatoria: z.enum(['S', 'N']).default('S'),
+  respElimina: z.string().optional(),
+});
+const esquemaConfiguracoes = z.object({
+  requisitos: z.array(esquemaRequisitoConfig).optional(),
+  perguntas: z.array(esquemaPerguntaConfig).optional(),
+  perfilCulturalIdeal: z.record(z.string(), z.coerce.number().min(1).max(5)).optional(),
+});
+
 /**
  * Ciclo de aprovação herdado do 1.0 (RN-REC-001):
  * RASCUNHO → EM_APROVACAO → (ABERTA | AJUSTES | REJEITADA); AJUSTES → EM_APROVACAO;
@@ -120,8 +143,9 @@ export class VagasController {
           empresa: { select: { nomeFantasia: true } },
           departamento: true,
           cargo: true,
-          requisitos: { orderBy: { ordem: 'asc' } },
-          perguntas: { orderBy: { ordem: 'asc' } },
+          requisitos: { where: { ativo: 'S' }, orderBy: { ordem: 'asc' } },
+          perguntas: { where: { ativo: 'S' }, orderBy: { ordem: 'asc' } },
+          _count: { select: { candidaturas: true } },
         },
       });
       if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
@@ -170,6 +194,103 @@ export class VagasController {
         });
       }
       return { codVag: vaga.codVag, titulo: vaga.titulo, status: vaga.status };
+    });
+  }
+
+  /**
+   * Configurações da vaga (requisitos, perguntas de triagem, perfil cultural
+   * ideal) — editáveis depois da criação, não só uma vez. Antes da 1ª
+   * candidatura, edição livre (adiciona/edita/remove). Depois, só
+   * adiciona/edita — nunca remove um requisito/pergunta existente, porque
+   * candidaturas já guardam a autoavaliação vinculada àquele item específico
+   * (removê-lo quebraria esse vínculo histórico, decisão registrada no vault).
+   */
+  @Patch(':codVag/configuracoes')
+  @Permissoes('recrutamento.vagas.criar')
+  configurar(@Req() req: ReqAut, @Param('codVag') codVag: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaConfiguracoes, corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const vaga = await tx.vaga.findFirst({ where: { codVag: BigInt(codVag), ativo: 'S' } });
+      if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
+      const qtdCandidaturas = await tx.candidatura.count({ where: { codVag: vaga.codVag } });
+      const podeRemover = qtdCandidaturas === 0;
+      const avisos: string[] = [];
+
+      if (dados.requisitos) {
+        const existentes = await tx.vagaRequisito.findMany({ where: { codVag: vaga.codVag, ativo: 'S' } });
+        const existentesPorId = new Map(existentes.map((r) => [r.codVagReq.toString(), r]));
+        for (const r of dados.requisitos) {
+          if (r.codVagReq && !existentesPorId.has(r.codVagReq.toString())) {
+            throw new BadRequestException('Requisito não pertence a esta vaga');
+          }
+        }
+        const idsRecebidos = new Set(dados.requisitos.filter((r) => r.codVagReq).map((r) => r.codVagReq!.toString()));
+        const paraRemover = existentes.filter((e) => !idsRecebidos.has(e.codVagReq.toString()));
+        if (paraRemover.length > 0) {
+          if (podeRemover) {
+            // Nunca DELETE físico (convenção da plataforma) — desativa via ATIVO='N'.
+            await tx.vagaRequisito.updateMany({ where: { codVagReq: { in: paraRemover.map((r) => r.codVagReq) } }, data: { ativo: 'N' } });
+          } else {
+            avisos.push(`${paraRemover.length} requisito(s) existente(s) mantido(s) — a vaga já tem candidatura(s).`);
+          }
+        }
+        for (const [i, r] of dados.requisitos.entries()) {
+          const dataItem = {
+            descrReq: r.descrReq,
+            tipoReq: r.tipoReq,
+            knockout: r.knockout,
+            peso: r.peso,
+            nivelEsperado: r.nivelEsperado,
+            tempoEspMeses: r.tempoEspMeses,
+            evidenciaExigida: r.evidenciaExigida,
+            ordem: i + 1,
+          };
+          if (r.codVagReq) {
+            await tx.vagaRequisito.update({ where: { codVagReq: r.codVagReq }, data: dataItem });
+          } else {
+            await tx.vagaRequisito.create({ data: { codTen: req.usuario.codTen, codVag: vaga.codVag, ...dataItem } });
+          }
+        }
+      }
+
+      if (dados.perguntas) {
+        const existentes = await tx.vagaPergunta.findMany({ where: { codVag: vaga.codVag, ativo: 'S' } });
+        const existentesPorId = new Map(existentes.map((p) => [p.codVagPer.toString(), p]));
+        for (const p of dados.perguntas) {
+          if (p.codVagPer && !existentesPorId.has(p.codVagPer.toString())) {
+            throw new BadRequestException('Pergunta não pertence a esta vaga');
+          }
+        }
+        const idsRecebidos = new Set(dados.perguntas.filter((p) => p.codVagPer).map((p) => p.codVagPer!.toString()));
+        const paraRemover = existentes.filter((e) => !idsRecebidos.has(e.codVagPer.toString()));
+        if (paraRemover.length > 0) {
+          if (podeRemover) {
+            await tx.vagaPergunta.updateMany({ where: { codVagPer: { in: paraRemover.map((p) => p.codVagPer) } }, data: { ativo: 'N' } });
+          } else {
+            avisos.push(`${paraRemover.length} pergunta(s) existente(s) mantida(s) — a vaga já tem candidatura(s).`);
+          }
+        }
+        for (const [i, p] of dados.perguntas.entries()) {
+          const dataItem = {
+            pergunta: p.pergunta,
+            tipoResp: p.tipoResp,
+            obrigatoria: p.obrigatoria,
+            respElimina: p.respElimina,
+            ordem: i + 1,
+          };
+          if (p.codVagPer) {
+            await tx.vagaPergunta.update({ where: { codVagPer: p.codVagPer }, data: dataItem });
+          } else {
+            await tx.vagaPergunta.create({ data: { codTen: req.usuario.codTen, codVag: vaga.codVag, ...dataItem } });
+          }
+        }
+      }
+
+      if (dados.perfilCulturalIdeal) {
+        await tx.vaga.update({ where: { codVag: vaga.codVag }, data: { perfilCulturalIdealJson: dados.perfilCulturalIdeal } });
+      }
+
+      return { ok: true, avisos, bloqueadoPorCandidatura: !podeRemover };
     });
   }
 
