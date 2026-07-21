@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, fetchAutenticado } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
 
 interface Candidato {
@@ -20,7 +20,50 @@ interface Canal {
   vlrCustoMes: string | null;
 }
 
+interface KpiCanal {
+  codCanal: string;
+  nomeCanal: string;
+  tipoCanal: string;
+  custoMes: number | null;
+  candidaturas: number;
+  triagem: number;
+  entrevistas: number;
+  propostas: number;
+  contratacoes: number;
+  taxaContratacao: number | null;
+  qualidadeMedia: number | null;
+  tempoMedioContratacaoDias: number | null;
+  custoPorContratacao: number | null;
+}
+
+interface ItemLote {
+  arquivo: string;
+  status: "importado" | "reaproveitado" | "ignorado";
+  motivo?: string;
+  nomeCand?: string;
+  email?: string;
+}
+interface ResultadoLote {
+  total: number;
+  importados: number;
+  reaproveitados: number;
+  ignorados: number;
+  itens: ItemLote[];
+}
+interface VagaAberta {
+  codVag: string;
+  titulo: string;
+  status: string;
+}
+
+const ROTULO_LOTE: Record<ItemLote["status"], { texto: string; cor: string }> = {
+  importado: { texto: "Importado", cor: "var(--feedback-success, #15803d)" },
+  reaproveitado: { texto: "Já existia", cor: "var(--text-muted)" },
+  ignorado: { texto: "Não importado", cor: "var(--feedback-danger, #b91c1c)" },
+};
+
 const celula: React.CSSProperties = { padding: "10px 14px" };
+const numerico: React.CSSProperties = { ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 
 const ROTULO_ESTAGIO: Record<string, string> = {
   applied: "Recebidas", screening: "Triagem", analysis: "Análise", shortlist: "Shortlist",
@@ -52,6 +95,15 @@ export default function PaginaCandidatos() {
   const [aba, setAba] = useState<"candidatos" | "canais">("candidatos");
   const [lista, setLista] = useState<Candidato[]>([]);
   const [canais, setCanais] = useState<Canal[]>([]);
+  const [kpis, setKpis] = useState<KpiCanal[]>([]);
+  const [janela, setJanela] = useState(90);
+  const [abertaLote, setAbertaLote] = useState(false);
+  const [vagasAbertas, setVagasAbertas] = useState<VagaAberta[]>([]);
+  const [formLote, setFormLote] = useState({ codCanal: "", codVag: "" });
+  const [arquivosLote, setArquivosLote] = useState<FileList | null>(null);
+  const [importando, setImportando] = useState(false);
+  const [resultadoLote, setResultadoLote] = useState<ResultadoLote | null>(null);
+  const [resetInput, setResetInput] = useState(0);
   const [aberta, setAberta] = useState(false);
   const [abertaCanal, setAbertaCanal] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -67,6 +119,52 @@ export default function PaginaCandidatos() {
     if (r.status === 200 && r.json) setLista(r.json);
     if (c.status === 200 && c.json) setCanais(c.json);
   }, []);
+
+  // Os KPIs recarregam sozinhos quando a janela muda; ficam fora do `carregar`
+  // pra não refazer a lista de candidatos a cada troca de período.
+  const carregarKpis = useCallback(async () => {
+    const r = await api<KpiCanal[]>(`/canais/kpis?dias=${janela}`);
+    if (r.status === 200 && r.json) setKpis(r.json);
+  }, [janela]);
+
+  useEffect(() => {
+    if (aba === "canais") void carregarKpis();
+  }, [aba, carregarKpis]);
+
+  useEffect(() => {
+    if (!abertaLote) return;
+    void api<VagaAberta[]>("/vagas").then((r) => {
+      if (r.status === 200 && r.json) setVagasAbertas(r.json.filter((v) => v.status === "ABERTA"));
+    });
+  }, [abertaLote]);
+
+  /**
+   * Envio multipart — `api()` serializa JSON, então aqui vai direto no
+   * `fetchAutenticado` (que trata 401/renovação igual ao resto).
+   */
+  async function importarLote(e: React.FormEvent) {
+    e.preventDefault();
+    if (!arquivosLote?.length) return;
+    setErro(null);
+    setResultadoLote(null);
+    setImportando(true);
+
+    const dados = new FormData();
+    dados.set("codCanal", formLote.codCanal);
+    if (formLote.codVag) dados.set("codVag", formLote.codVag);
+    for (const arquivo of Array.from(arquivosLote)) dados.append("arquivos", arquivo);
+
+    const res = await fetchAutenticado("/candidatos/importar-lote", { method: "POST", body: dados });
+    setImportando(false);
+    if (res.status !== 201) {
+      setErro("Não foi possível importar o lote. Confira o canal e a vaga selecionados.");
+      return;
+    }
+    setResultadoLote((await res.json()) as ResultadoLote);
+    setArquivosLote(null);
+    setResetInput((n) => n + 1);
+    await carregar();
+  }
 
   async function salvarCanal(e: React.FormEvent) {
     e.preventDefault();
@@ -87,7 +185,7 @@ export default function PaginaCandidatos() {
     }
     setAbertaCanal(false);
     setFormCanal({ nomeCanal: "", tipoCanal: "manual", vlrCustoMes: "" });
-    await carregar();
+    await Promise.all([carregar(), carregarKpis()]);
   }
 
   useEffect(() => {
@@ -153,7 +251,15 @@ export default function PaginaCandidatos() {
         <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
           Único por e-mail/CPF no grupo, mesmo vindo de canais diferentes.
         </p>
-        <BotaoPrimario onClick={() => setAberta(true)}>Cadastrar candidato</BotaoPrimario>
+        <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+          <BotaoPrimario
+            onClick={() => { setResultadoLote(null); setAbertaLote(true); }}
+            style={{ background: "transparent", color: "var(--text-body)", border: "1px solid var(--border-default)" }}
+          >
+            Importar currículos
+          </BotaoPrimario>
+          <BotaoPrimario onClick={() => setAberta(true)}>Cadastrar candidato</BotaoPrimario>
+        </div>
       </header>
 
       <Entrada
@@ -238,34 +344,66 @@ export default function PaginaCandidatos() {
 
       {aba === "canais" && (
       <section style={{ marginTop: 20 }}>
-        <header style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
-            De onde os candidatos chegam — vagas.com, Catho, indicação, importação...
+        <header style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0, maxWidth: 620 }}>
+            De onde os candidatos chegam e o que cada canal entrega. O funil conta quem
+            <strong style={{ fontWeight: 600 }}> chegou ao menos até</strong> cada etapa — quem foi
+            entrevistado e recusado continua contando como entrevista.
           </p>
-          <BotaoPrimario onClick={() => setAbertaCanal(true)}>Novo canal</BotaoPrimario>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+            <Selecao value={String(janela)} onChange={(e) => setJanela(Number(e.target.value))} aria-label="Período">
+              <option value="30">Últimos 30 dias</option>
+              <option value="90">Últimos 90 dias</option>
+              <option value="180">Últimos 6 meses</option>
+              <option value="365">Últimos 12 meses</option>
+            </Selecao>
+            <BotaoPrimario onClick={() => setAbertaCanal(true)} style={{ whiteSpace: "nowrap" }}>Novo canal</BotaoPrimario>
+          </div>
         </header>
-        <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 1120 }}>
             <thead>
               <tr style={{ background: "var(--surface-page)", textAlign: "left" }}>
-                <th style={{ ...celula, fontWeight: 600 }}>Nome</th>
-                <th style={{ ...celula, fontWeight: 600 }}>Tipo</th>
-                <th style={{ ...celula, fontWeight: 600 }}>Custo mensal</th>
+                <th style={{ ...celula, fontWeight: 600 }}>Canal</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }}>Candidaturas</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }}>Triagem</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }}>Entrevistas</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }}>Propostas</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }}>Contratações</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }} title="Contratações ÷ candidaturas do período">Conversão</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }} title="Média do score de contratação (match determinístico) dos candidatos do canal">Qualidade</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }} title="Dias entre a candidatura e a contratação">Tempo médio</th>
+                <th style={{ ...celula, fontWeight: 600, textAlign: "right" }} title="Custo mensal rateado pelo período ÷ contratações">Custo/contratação</th>
               </tr>
             </thead>
             <tbody>
-              {canais.map((c) => (
-                <tr key={c.codCanal} style={{ borderTop: "1px solid var(--border-default)" }}>
-                  <td style={celula}>{c.nomeCanal}</td>
-                  <td style={{ ...celula, color: "var(--text-muted)" }}>{c.tipoCanal}</td>
-                  <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>
-                    {c.vlrCustoMes ? `R$ ${Number(c.vlrCustoMes).toFixed(2)}` : "—"}
+              {kpis.map((k) => (
+                <tr key={k.codCanal} style={{ borderTop: "1px solid var(--border-default)" }}>
+                  <td style={celula}>
+                    <div style={{ fontWeight: 500 }}>{k.nomeCanal}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      {k.tipoCanal}
+                      {k.custoMes != null && ` · R$ ${k.custoMes.toFixed(2)}/mês`}
+                    </div>
+                  </td>
+                  <td style={numerico}>{k.candidaturas}</td>
+                  <td style={numerico}>{k.triagem}</td>
+                  <td style={numerico}>{k.entrevistas}</td>
+                  <td style={numerico}>{k.propostas}</td>
+                  <td style={{ ...numerico, fontWeight: 600 }}>{k.contratacoes}</td>
+                  <td style={numerico}>{k.taxaContratacao == null ? "—" : `${k.taxaContratacao}%`}</td>
+                  <td style={numerico}>{k.qualidadeMedia ?? "—"}</td>
+                  <td style={numerico}>{k.tempoMedioContratacaoDias == null ? "—" : `${k.tempoMedioContratacaoDias} d`}</td>
+                  <td style={numerico}>
+                    {k.custoPorContratacao == null
+                      ? <span title={k.custoMes == null ? "Canal sem custo informado" : "Nenhuma contratação no período"} style={{ color: "var(--text-muted)" }}>—</span>
+                      : `R$ ${k.custoPorContratacao.toFixed(2)}`}
                   </td>
                 </tr>
               ))}
-              {canais.length === 0 && (
+              {kpis.length === 0 && (
                 <tr>
-                  <td colSpan={3} style={{ padding: 20, color: "var(--text-muted)", textAlign: "center" }}>
+                  <td colSpan={10} style={{ padding: 20, color: "var(--text-muted)", textAlign: "center" }}>
                     Nenhum canal ainda — crie ao menos um (ex.: &quot;Manual&quot;) para registrar candidaturas.
                   </td>
                 </tr>
@@ -275,6 +413,91 @@ export default function PaginaCandidatos() {
         </div>
       </section>
       )}
+
+      <Gaveta titulo="Importar currículos em lote" aberta={abertaLote} fechar={() => setAbertaLote(false)} largura={560}>
+        <form onSubmit={importarLote} style={{ display: "grid", gap: 14 }}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+            Até 20 arquivos por vez (PDF, DOCX ou TXT, 8MB cada). Nome, e-mail e telefone são lidos
+            do próprio currículo. Currículo <strong style={{ fontWeight: 600 }}>sem e-mail</strong> não
+            é importado — sem ele não dá para deduplicar nem falar com a pessoa; ele volta na lista
+            para você cadastrar à mão.
+          </p>
+          <Campo rotulo="Canal de origem">
+            <Selecao
+              required
+              value={formLote.codCanal}
+              onChange={(e) => setFormLote({ ...formLote, codCanal: e.target.value })}
+            >
+              <option value="">Selecione…</option>
+              {canais.map((c) => (
+                <option key={c.codCanal} value={c.codCanal}>{c.nomeCanal}</option>
+              ))}
+            </Selecao>
+          </Campo>
+          <Campo rotulo="Vaga (opcional — sem vaga, entram só no banco de talentos)">
+            <Selecao value={formLote.codVag} onChange={(e) => setFormLote({ ...formLote, codVag: e.target.value })}>
+              <option value="">Nenhuma</option>
+              {vagasAbertas.map((v) => (
+                <option key={v.codVag} value={v.codVag}>{v.titulo}</option>
+              ))}
+            </Selecao>
+          </Campo>
+          <Campo rotulo="Arquivos">
+            {/* `key` muda a cada importação concluída: sem isso o input nativo continua
+                exibindo "3 arquivos" enquanto o estado já foi limpo. */}
+            <input
+              key={resetInput}
+              type="file"
+              multiple
+              required
+              accept=".pdf,.docx,.txt"
+              onChange={(e) => setArquivosLote(e.target.files)}
+              style={{ font: "inherit", fontSize: 14 }}
+            />
+          </Campo>
+          <Erro mensagem={erro} />
+          <BotaoPrimario type="submit" disabled={importando || !arquivosLote?.length}>
+            {importando ? "Importando…" : `Importar ${arquivosLote?.length ?? 0} arquivo(s)`}
+          </BotaoPrimario>
+        </form>
+
+        {resultadoLote && (
+          <div style={{ marginTop: 22 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
+              {resultadoLote.importados} importado(s) · {resultadoLote.reaproveitados} já existia(m) ·{" "}
+              {resultadoLote.ignorados} não importado(s)
+            </h3>
+            <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-muted)" }}>
+              Candidaturas importadas entram sem score — o match só existe depois que o candidato
+              responde a autoavaliação da vaga.
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
+              {resultadoLote.itens.map((item) => (
+                <li
+                  key={item.arquivo}
+                  style={{
+                    border: "1px solid var(--border-default)",
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    fontSize: 13,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{item.arquivo}</span>
+                    <span style={{ color: ROTULO_LOTE[item.status].cor, fontWeight: 600, flexShrink: 0 }}>
+                      {ROTULO_LOTE[item.status].texto}
+                    </span>
+                  </div>
+                  <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
+                    {item.nomeCand ? `${item.nomeCand} · ${item.email}` : item.motivo}
+                    {item.nomeCand && item.motivo ? ` · ${item.motivo}` : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Gaveta>
 
       <Gaveta titulo="Cadastrar candidato" aberta={aberta} fechar={() => setAberta(false)}>
         <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>

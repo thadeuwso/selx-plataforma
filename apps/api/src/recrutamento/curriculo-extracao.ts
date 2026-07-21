@@ -75,3 +75,54 @@ export function detectarContatoNoTexto(texto: string): { email?: string; fone?: 
 
   return { email, fone };
 }
+
+/** Cabeçalhos comuns que ocupam a primeira linha e não são o nome de ninguém. */
+const CABECALHOS_IGNORADOS =
+  /^(curr[ií]culo|curriculum|curriculum\s+vitae|cv|dados\s+pessoais|perfil\s+profissional|resumo)\b/i;
+
+/**
+ * Nome do candidato a partir do currículo, para importação em lote — sem IA.
+ *
+ * Currículo não tem campo "nome": o nome é quase sempre a primeira linha de
+ * conteúdo, em destaque. A heurística aceita apenas linhas curtas, de 2 a 5
+ * palavras, só com letras (acentos e hífen inclusos), descartando cabeçalhos
+ * ("Currículo", "Dados pessoais") e qualquer linha com dígito, "@" ou ":" —
+ * sinais de que é contato, endereço ou rótulo, não nome.
+ *
+ * Quando o texto não entrega nada confiável, cai no nome do arquivo
+ * (`joao_silva.pdf` → "Joao Silva"), padrão comum em exportação de portal. Se
+ * nem isso resolver, devolve `undefined` — quem chama decide, e a importação
+ * prefere marcar o arquivo para revisão a inventar um nome.
+ */
+export function detectarNomeNoTexto(texto: string, nomeArquivo?: string): string | undefined {
+  const candidata = texto
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length >= 5 && l.length <= 60)
+    .filter((l) => !/[\d@:;|/\\]/.test(l))
+    .filter((l) => !CABECALHOS_IGNORADOS.test(l))
+    .find((l) => {
+      const palavras = l.split(/\s+/);
+      return palavras.length >= 2 && palavras.length <= 5 && /^[\p{L}\s'-]+$/u.test(l);
+    });
+  if (candidata) return normalizarNome(candidata);
+
+  if (!nomeArquivo) return undefined;
+  const base = nomeArquivo.replace(/\.[^.]+$/, '').replace(/[_.-]+/g, ' ').trim();
+  const palavras = base.split(/\s+/);
+  if (palavras.length < 2 || palavras.length > 5 || !/^[\p{L}\s'-]+$/u.test(base)) return undefined;
+  return normalizarNome(base);
+}
+
+/** "JOÃO DA SILVA" e "joão da silva" viram "João da Silva" — preposições em minúscula. */
+const PREPOSICOES = new Set(['da', 'de', 'do', 'das', 'dos', 'e']);
+function normalizarNome(bruto: string): string {
+  return bruto
+    .split(/\s+/)
+    .map((p, i) => {
+      const minuscula = p.toLocaleLowerCase('pt-BR');
+      if (i > 0 && PREPOSICOES.has(minuscula)) return minuscula;
+      return minuscula.charAt(0).toLocaleUpperCase('pt-BR') + minuscula.slice(1);
+    })
+    .join(' ');
+}

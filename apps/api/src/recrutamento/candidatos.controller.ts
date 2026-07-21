@@ -21,6 +21,16 @@ export const ESTAGIOS = [
 
 const ORDENACOES = ['prioridade', 'aderencia_desc', 'aderencia_asc', 'recentes', 'antigos', 'nome', 'etapa'] as const;
 
+/**
+ * Etapas de avanço, em ordem, para o funil por canal (RN-REC-010). Só progresso:
+ * os estágios terminais (knockout, rejected, not_selected, archived) são desfecho,
+ * não um degrau a mais — entrariam no funil inflando a etapa em que pararam.
+ */
+const ETAPAS_FUNIL = ['applied', 'screening', 'analysis', 'shortlist', 'interview', 'offer', 'hired'] as const;
+
+const arredondar = (n: number) => Math.round(n * 10) / 10;
+const percentual = (parte: number, total: number) => (total === 0 ? null : arredondar((parte * 100) / total));
+
 const esquemaListaCandidaturas = z.object({
   pagina: z.coerce.number().int().min(1).default(1),
   tamanhoPagina: z.coerce.number().int().min(1).max(200).default(50),
@@ -203,6 +213,112 @@ export class CandidatosController {
     return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
       tx.canal.findMany({ where: { ativo: 'S' }, orderBy: { codCanal: 'asc' } }),
     );
+  }
+
+  /**
+   * Funil, qualidade e custo por canal (RN-REC-010).
+   *
+   * O funil é "chegou ao menos até X", reconstruído da timeline — não do estágio
+   * atual. Contando o estágio atual, um canal cujos candidatos foram todos
+   * entrevistados e recusados apareceria com zero entrevistas, justamente onde a
+   * métrica decide investimento.
+   */
+  @Get('canais/kpis')
+  @Permissoes('recrutamento.candidatos.ler')
+  async kpisPorCanal(@Req() req: ReqAut, @Query('dias') dias?: string) {
+    const janelaDias = Math.min(Math.max(Number(dias) || 90, 1), 365);
+    const desde = new Date(Date.now() - janelaDias * 24 * 60 * 60 * 1000);
+
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const canais = await tx.canal.findMany({ where: { ativo: 'S' }, orderBy: { codCanal: 'asc' } });
+      const candidaturas = await tx.candidatura.findMany({
+        where: { ativo: 'S', dhInc: { gte: desde } },
+        select: { codCdt: true, codCanal: true, estagio: true, dhInc: true, knockoutJson: true },
+      });
+
+      const codCdts = candidaturas.map((c) => c.codCdt);
+      // Duas consultas fixas, não uma por candidatura — a agregação acontece em
+      // memória, limitada pela janela (padrão 90 dias).
+      const [eventos, matches] = await Promise.all([
+        codCdts.length
+          ? tx.candidaturaHistorico.findMany({
+              where: { codCdt: { in: codCdts }, tipoEvento: 'mudanca_estagio' },
+              select: { codCdt: true, estagioNovo: true, dhInc: true },
+            })
+          : [],
+        codCdts.length
+          ? tx.matchResumo.findMany({
+              where: { codCdt: { in: codCdts } },
+              select: { codCdt: true, scoreContratacao: true, scoreGeral: true },
+            })
+          : [],
+      ]);
+
+      // Só as etapas de avanço entram no funil; terminais (rejected, archived...)
+      // não são "progresso", são desfecho.
+      const ordem = new Map<string, number>(ETAPAS_FUNIL.map((e, i) => [e, i]));
+      const alcanceMax = new Map<string, number>();
+      const dhContratacao = new Map<string, Date>();
+      for (const cdt of candidaturas) {
+        alcanceMax.set(cdt.codCdt.toString(), ordem.get(cdt.estagio) ?? -1);
+      }
+      for (const ev of eventos) {
+        const chave = ev.codCdt.toString();
+        const pos = ordem.get(ev.estagioNovo ?? '') ?? -1;
+        if (pos > (alcanceMax.get(chave) ?? -1)) alcanceMax.set(chave, pos);
+        if (ev.estagioNovo === 'hired' && !dhContratacao.has(chave)) dhContratacao.set(chave, ev.dhInc);
+      }
+      const scorePorCdt = new Map(
+        matches.map((m) => [m.codCdt.toString(), m.scoreContratacao ?? m.scoreGeral]),
+      );
+
+      return canais.map((canal) => {
+        const doCanal = candidaturas.filter((c) => c.codCanal === canal.codCanal);
+        const alcancou = (etapa: string) => {
+          const alvo = ordem.get(etapa)!;
+          return doCanal.filter((c) => (alcanceMax.get(c.codCdt.toString()) ?? -1) >= alvo).length;
+        };
+
+        const contratacoes = alcancou('hired');
+        const scores = doCanal
+          .map((c) => scorePorCdt.get(c.codCdt.toString()))
+          .filter((s): s is number => s != null);
+        const diasAteContratar = doCanal
+          .map((c) => {
+            const dh = dhContratacao.get(c.codCdt.toString());
+            return dh ? (dh.getTime() - c.dhInc.getTime()) / (24 * 60 * 60 * 1000) : null;
+          })
+          .filter((d): d is number => d != null);
+
+        // Custo mensal rateado pela janela — sem histórico de custo, o valor de
+        // hoje é a melhor estimativa que temos; não inventamos série temporal.
+        const custoMes = canal.vlrCustoMes ? Number(canal.vlrCustoMes) : null;
+        const custoPeriodo = custoMes == null ? null : arredondar((custoMes * janelaDias) / 30);
+
+        return {
+          codCanal: canal.codCanal,
+          nomeCanal: canal.nomeCanal,
+          tipoCanal: canal.tipoCanal,
+          custoMes,
+          custoPeriodo,
+          candidaturas: doCanal.length,
+          triagem: alcancou('screening'),
+          entrevistas: alcancou('interview'),
+          propostas: alcancou('offer'),
+          contratacoes,
+          eliminadosTriagem: doCanal.filter((c) => c.estagio === 'knockout' || c.knockoutJson != null).length,
+          taxaEntrevista: percentual(alcancou('interview'), doCanal.length),
+          taxaContratacao: percentual(contratacoes, doCanal.length),
+          qualidadeMedia: scores.length ? arredondar(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
+          altaAderencia: scores.filter((s) => s >= 75).length,
+          tempoMedioContratacaoDias: diasAteContratar.length
+            ? arredondar(diasAteContratar.reduce((a, b) => a + b, 0) / diasAteContratar.length)
+            : null,
+          custoPorCandidatura: custoPeriodo != null && doCanal.length ? arredondar(custoPeriodo / doCanal.length) : null,
+          custoPorContratacao: custoPeriodo != null && contratacoes ? arredondar(custoPeriodo / contratacoes) : null,
+        };
+      });
+    });
   }
 
   @Post('canais')

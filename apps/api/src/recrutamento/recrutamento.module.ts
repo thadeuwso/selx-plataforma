@@ -7,6 +7,7 @@ import { AdmissaoPublicoController } from './admissao-publico.controller';
 import { AdmissoesListaController } from './admissoes-lista.controller';
 import { CandidatosController } from './candidatos.controller';
 import { CurriculosController } from './curriculos.controller';
+import { ImportacaoLoteController } from './importacao-lote.controller';
 import { IaVagasController } from './ia-vagas.controller';
 import { VagasController } from './vagas.controller';
 
@@ -17,6 +18,7 @@ import { VagasController } from './vagas.controller';
     CandidatosController,
     IaVagasController,
     CurriculosController,
+    ImportacaoLoteController,
     AdmissaoProcessoController,
     AdmissaoPublicoController,
     AcompanhamentoPublicoController,

@@ -26,7 +26,6 @@ const MIME_POR_EXTENSAO: Record<string, string> = {
 };
 
 const TAMANHO_MAX_BYTES = 8 * 1024 * 1024; // 8MB
-
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 
 @Controller('candidatos/:codCand/curriculo')

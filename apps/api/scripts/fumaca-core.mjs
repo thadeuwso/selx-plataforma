@@ -1019,6 +1019,115 @@ verificar("remove responsável (null) limpa o campo", limpaResp.status === 200 &
 const respOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenB);
 verificar("tenant B não atribui responsável em vaga do tenant A → 400", respOutroTenant.status === 400);
 
+// 27a. Importação de currículos em lote
+const vagaLote = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Importação Lote" }, tokenA2);
+await http("PATCH", `/vagas/${vagaLote.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaLote.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+
+const cvDe = (nome, email) =>
+  `${nome}\nEmail: ${email}\nTelefone: (11) 97777-1234\n\nExperiencia\nAnalista - Empresa Z - 2020-2025\n`;
+const formLote = new FormData();
+formLote.set("codCanal", String(canal.json?.codCanal));
+formLote.set("codVag", String(vagaLote.json?.codVag));
+formLote.append("arquivos", new Blob([cvDe("Rafael Moreira Lima", `rafael.${rodada}@mail.com`)], { type: "text/plain" }), "rafael.txt");
+formLote.append("arquivos", new Blob([cvDe("Juliana Castro", `juliana.${rodada}@mail.com`)], { type: "text/plain" }), "juliana.txt");
+// Sem e-mail não há como deduplicar nem contatar — tem que sobrar para revisão manual.
+formLote.append("arquivos", new Blob(["Curriculo sem contato nenhum\nExperiencia diversa\n"], { type: "text/plain" }), "sem-email.txt");
+// Já cadastrada no banco de talentos: o currículo é anexado, o cadastro não é sobrescrito.
+formLote.append("arquivos", new Blob([cvDe("Nome Chutado Errado", `diana.${rodada}@mail.com`)], { type: "text/plain" }), "diana-de-novo.txt");
+formLote.append("arquivos", new Blob([Buffer.from([0x00, 0x01, 0x02])], { type: "image/png" }), "foto.png");
+
+const loteRes = await fetch(`${base}/candidatos/importar-lote`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${tokenA2}` },
+  body: formLote,
+});
+const lote = await loteRes.json().catch(() => null);
+verificar(
+  "importa lote de currículos: 2 novos, 1 reaproveitado, 2 ignorados",
+  loteRes.status === 201 && lote?.total === 5 && lote?.importados === 2 && lote?.reaproveitados === 1 && lote?.ignorados === 2,
+);
+verificar(
+  "arquivo sem e-mail é ignorado com motivo, não vira candidato mudo",
+  lote?.itens?.find((i) => i.arquivo === "sem-email.txt")?.motivo === "Nenhum e-mail encontrado no currículo",
+);
+verificar(
+  "formato não suportado é ignorado sem derrubar o lote inteiro",
+  lote?.itens?.find((i) => i.arquivo === "foto.png")?.status === "ignorado",
+);
+verificar(
+  "nome é deduzido do currículo (heurística, sem IA)",
+  lote?.itens?.find((i) => i.arquivo === "rafael.txt")?.nomeCand === "Rafael Moreira Lima",
+);
+const dianaDepois = (await http("GET", "/candidatos", null, tokenA2)).json
+  ?.find((c) => c.codCand === candDiana.json?.codCand);
+verificar(
+  "candidato já existente não tem o nome sobrescrito pelo palpite do lote",
+  dianaDepois?.nomeCand === "Diana Rocha",
+);
+const cdtsLote = await http("GET", `/vagas/${vagaLote.json?.codVag}/candidaturas`, null, tokenA2);
+verificar(
+  "cada currículo importado virou candidatura na vaga informada (3)",
+  cdtsLote.json?.total === 3 && cdtsLote.json?.itens?.every((c) => c.estagio === "applied"),
+);
+// Sem autoavaliação não existe match: zero seria indistinguível de quem foi mal avaliado.
+verificar(
+  "candidatura importada entra sem score, não com score zero",
+  cdtsLote.json?.itens?.every((c) => c.match == null),
+);
+const loteVagaFechada = new FormData();
+loteVagaFechada.set("codCanal", String(canal.json?.codCanal));
+loteVagaFechada.set("codVag", String(vagaSemRequisitos.json?.codVag));
+loteVagaFechada.append("arquivos", new Blob([cvDe("Alguem Qualquer", `alguem.${rodada}@mail.com`)], { type: "text/plain" }), "x.txt");
+const loteB = await fetch(`${base}/candidatos/importar-lote`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${tokenB}` },
+  body: loteVagaFechada,
+});
+verificar("tenant B não importa lote para canal/vaga do tenant A → 400", loteB.status === 400);
+
+// 27b. KPIs de funil por canal (RN-REC-010)
+const canalKpi = await http("POST", "/canais", { nomeCanal: `Canal KPI ${rodada}`, tipoCanal: "conector", vlrCustoMes: 3000 }, tokenA2);
+const vagaKpi = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga KPI Canal" }, tokenA2);
+await http("PATCH", `/vagas/${vagaKpi.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaKpi.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+
+const cdtEntrevistado = await http("POST", `/vagas/${vagaKpi.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Entrevistado Recusado", email: `entrev.${rodada}@mail.com` }, codCanal: canalKpi.json?.codCanal,
+}, tokenA2);
+const cdtParado = await http("POST", `/vagas/${vagaKpi.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Parou na Triagem", email: `parou.${rodada}@mail.com` }, codCanal: canalKpi.json?.codCanal,
+}, tokenA2);
+
+// Avança até entrevista e DEPOIS recusa — o estágio atual vira terminal.
+for (const etapa of ["screening", "analysis", "shortlist", "interview", "rejected"]) {
+  await http("PATCH", `/candidaturas/${cdtEntrevistado.json?.codCdt}/estagio`, { estagio: etapa }, tokenA2);
+}
+await http("PATCH", `/candidaturas/${cdtParado.json?.codCdt}/estagio`, { estagio: "screening" }, tokenA2);
+
+const kpis = await http("GET", "/canais/kpis?dias=90", null, tokenA2);
+const kpiCanal = kpis.json?.find((k) => String(k.codCanal) === String(canalKpi.json?.codCanal));
+verificar(
+  "KPIs por canal respondem 200 e trazem o canal recém-criado com suas 2 candidaturas",
+  kpis.status === 200 && kpiCanal?.candidaturas === 2,
+);
+// O ponto do desenho: o funil é "chegou ao menos até", reconstruído da timeline.
+// Se fosse contado pelo estágio atual, este candidato (hoje em 'rejected') sumiria
+// da coluna de entrevistas e o canal pareceria não entregar entrevista nenhuma.
+verificar(
+  "funil conta quem chegou até a entrevista mesmo tendo sido recusado depois (timeline, não estágio atual)",
+  kpiCanal?.entrevistas === 1 && kpiCanal?.triagem === 2 && kpiCanal?.propostas === 0,
+);
+verificar(
+  "sem contratação no período, custo por contratação fica nulo (não divide por zero)",
+  kpiCanal?.contratacoes === 0 && kpiCanal?.custoPorContratacao === null && kpiCanal?.taxaContratacao === 0,
+);
+const kpisB = await http("GET", "/canais/kpis?dias=90", null, tokenB);
+verificar(
+  "tenant B não vê canais nem números do tenant A nos KPIs",
+  kpisB.status === 200 && !kpisB.json?.some((k) => String(k.codCanal) === String(canalKpi.json?.codCanal)),
+);
+
 // 28. Banco de perguntas e questionário próprio do tenant (RN-GP-001)
 const bancoPerguntas = await http("GET", "/gestao-pessoas/perguntas", null, tokenA2);
 verificar(
