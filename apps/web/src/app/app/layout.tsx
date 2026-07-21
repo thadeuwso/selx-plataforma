@@ -34,7 +34,10 @@ const navegacao: GrupoNav[] = [
   },
   {
     grupo: "Administração",
-    itens: [{ rota: "/app/administracao/usuarios", rotulo: "Usuários" }],
+    itens: [
+      { rota: "/app/administracao/usuarios", rotulo: "Usuários" },
+      { rota: "/app/conta", rotulo: "Minha conta" },
+    ],
   },
 ];
 

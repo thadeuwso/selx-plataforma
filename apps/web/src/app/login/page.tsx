@@ -111,6 +111,9 @@ export default function PaginaLogin() {
         >
           {carregando ? "Entrando..." : "Entrar"}
         </button>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center" }}>
+          Não tem conta? <a href="/cadastro" style={{ color: "var(--text-link)" }}>Criar conta</a>
+        </div>
       </form>
     </main>
   );

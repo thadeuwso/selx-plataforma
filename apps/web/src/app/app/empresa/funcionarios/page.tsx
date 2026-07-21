@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
+import { FuncionarioDrawer } from "@/componentes/funcionario-drawer";
 
 interface Funcionario {
   codFun: string;
@@ -31,6 +32,7 @@ export default function PaginaFuncionarios() {
   const [cargos, setCargos] = useState<Opcao[]>([]);
   const [departamentos, setDepartamentos] = useState<Opcao[]>([]);
   const [aberta, setAberta] = useState(false);
+  const [detalhe, setDetalhe] = useState<{ codFun: string; nomeFun: string; numCad: string } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({
@@ -119,7 +121,11 @@ export default function PaginaFuncionarios() {
           </thead>
           <tbody>
             {lista.map((f) => (
-              <tr key={f.codFun} style={{ borderTop: "1px solid var(--border-default)" }}>
+              <tr
+                key={f.codFun}
+                onClick={() => setDetalhe({ codFun: f.codFun, nomeFun: f.nomeFun, numCad: f.numCad })}
+                style={{ borderTop: "1px solid var(--border-default)", cursor: "pointer" }}
+              >
                 <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{f.numCad}</td>
                 <td style={celula}>{f.nomeFun}</td>
                 <td style={{ ...celula, color: "var(--text-muted)" }}>{f.empresa?.nomeFantasia}</td>
@@ -207,6 +213,8 @@ export default function PaginaFuncionarios() {
           </BotaoPrimario>
         </form>
       </Gaveta>
+
+      <FuncionarioDrawer funcionario={detalhe} fechar={() => setDetalhe(null)} />
     </main>
   );
 }
