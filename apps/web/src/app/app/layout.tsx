@@ -21,6 +21,7 @@ const navegacao: GrupoNav[] = [
       { rota: "/app/recrutamento/vagas", rotulo: "Vagas" },
       { rota: "/app/recrutamento/candidatos", rotulo: "Candidatos" },
       { rota: "/app/recrutamento/admissao", rotulo: "Admissão" },
+      { rota: "/app/recrutamento/banco-perguntas", rotulo: "Banco de perguntas" },
       { rota: "/app/recrutamento/comportamental-padrao", rotulo: "Padrão Comportamental" },
     ],
   },
