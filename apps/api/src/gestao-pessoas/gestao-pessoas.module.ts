@@ -1,9 +1,15 @@
 import { Module } from '@nestjs/common';
 import { AvaliacaoComportamentalController } from './avaliacao-comportamental.controller';
 import { AvaliacaoComportamentalPublicoController } from './avaliacao-comportamental-publico.controller';
+import { IaComportamentalController } from './ia-comportamental.controller';
 import { PerfilComportamentalController } from './perfil-comportamental.controller';
 
 @Module({
-  controllers: [PerfilComportamentalController, AvaliacaoComportamentalController, AvaliacaoComportamentalPublicoController],
+  controllers: [
+    PerfilComportamentalController,
+    AvaliacaoComportamentalController,
+    AvaliacaoComportamentalPublicoController,
+    IaComportamentalController,
+  ],
 })
 export class GestaoPessoasModule {}

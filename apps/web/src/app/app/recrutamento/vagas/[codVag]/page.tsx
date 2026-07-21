@@ -1,9 +1,9 @@
 "use client";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
+import { CandidatoDrawer } from "@/componentes/candidato-drawer";
 
 interface Candidatura {
   codCdt: string;
@@ -21,6 +21,14 @@ interface Candidatura {
     qtdGapsCrit: number;
   } | null;
   processoAdmissao: { status: string } | null;
+  convitesComportamentais: {
+    tokenPub: string;
+    status: string;
+    sessao: {
+      dhConclusao: string | null;
+      resultado: { indicadorConsistencia: string; aderencias: { aderenciaGeral: number }[] } | null;
+    } | null;
+  }[];
 }
 
 const DIMENSOES_CULTURA = [
@@ -32,12 +40,71 @@ const DIMENSOES_CULTURA = [
   { chave: "directCommunication", rotulo: "Comunicação direta" },
 ] as const;
 
-const ROTULO_STATUS_ADMISSAO: Record<string, string> = {
-  AGUARDANDO_CANDIDATO: "Aguardando candidato",
-  AGUARDANDO_APROVACAO_DP: "Aguardando aprovação do DP",
-  AJUSTES_SOLICITADOS: "Ajustes solicitados",
-  APROVADO: "Aprovado",
+const ROTULO_STATUS_CONVITE: Record<string, string> = {
+  PENDENTE: "Convite enviado",
+  ACEITO: "Respondendo",
+  REVOGADO: "Revogado",
+  EXPIRADO: "Expirado",
 };
+
+const FATORES_COMPORTAMENTAIS = [
+  { sigla: "DIR", rotulo: "Direcionamento" },
+  { sigla: "CON", rotulo: "Conexão" },
+  { sigla: "SUS", rotulo: "Sustentação" },
+  { sigla: "PRE", rotulo: "Precisão" },
+] as const;
+
+const ROTULO_FAIXA: Record<string, string> = {
+  muito_baixa: "Muito baixa",
+  baixa: "Baixa",
+  moderada: "Moderada",
+  alta: "Alta",
+  muito_alta: "Muito alta",
+};
+
+const ROTULO_CONSISTENCIA: Record<string, string> = {
+  ADEQUADA: "Adequada",
+  REQUER_ATENCAO: "Requer atenção (muitas respostas neutras)",
+  BAIXA_CONSISTENCIA: "Baixa consistência (respostas muito uniformes)",
+};
+
+interface FacetaComportamental {
+  codFat: string;
+  faceta: string;
+  percentualNormalizado: number;
+  quantidade: number;
+}
+interface DetalheComportamental {
+  status: string;
+  facetas: FacetaComportamental[];
+  sessao: {
+    dhConclusao: string | null;
+    tempoTotalSeg: number | null;
+    resultado: {
+      indicadorConsistencia: string;
+      percRespNeutras: number;
+      percRespUniformes: number;
+      fatores: { fator: { sigla: string; nome: string }; percentualNormalizado: number; faixaInterpretativa: string }[];
+      aderencias: {
+        aderenciaGeral: number;
+        fatores: { fator: { sigla: string; nome: string }; distanciaFaixa: number; aderenciaDimensao: number; dentroDaFaixa: string }[];
+      }[];
+    } | null;
+  } | null;
+}
+
+interface PerfilComportamentalFator {
+  fator: { sigla: string };
+  minimo: number;
+  maximo: number;
+  peso: number;
+  importancia: string;
+  eliminatorio: string;
+}
+interface PerfilComportamental {
+  codPerVag: string;
+  fatores: PerfilComportamentalFator[];
+}
 interface Vaga {
   codVag: string;
   titulo: string;
@@ -71,7 +138,6 @@ const rotuloEstagio = (chave: string) => TODOS_ESTAGIOS.find((e) => e.chave === 
 
 export default function PipelineVaga() {
   const { codVag } = useParams<{ codVag: string }>();
-  const rotear = useRouter();
   const [vaga, setVaga] = useState<Vaga | null>(null);
   const [candidaturas, setCandidaturas] = useState<Candidatura[]>([]);
   const [canais, setCanais] = useState<Canal[]>([]);
@@ -82,17 +148,42 @@ export default function PipelineVaga() {
   const [respostas, setRespostas] = useState<Record<string, string>>({});
   const [autoavaliacao, setAutoavaliacao] = useState<Record<string, { nivel: string; tempoMeses: string; evidenciaTexto: string }>>({});
   const [perfilCultural, setPerfilCultural] = useState<Record<string, string>>({});
-  const [iniciandoAdmissao, setIniciandoAdmissao] = useState<string | null>(null);
+  const [perfilComportamental, setPerfilComportamental] = useState<PerfilComportamental | null>(null);
+  const [perfilAberta, setPerfilAberta] = useState(false);
+  const [salvandoPerfil, setSalvandoPerfil] = useState(false);
+  const [perfilForm, setPerfilForm] = useState<
+    Record<string, { incluir: boolean; minimo: string; maximo: string; eliminatorio: boolean }>
+  >({});
+  const [drawerCodCdt, setDrawerCodCdt] = useState<string | null>(null);
+  const [selecionadosComparar, setSelecionadosComparar] = useState<string[]>([]);
+  const [comparacao, setComparacao] = useState<{ nomeCand: string; dados: DetalheComportamental }[] | null>(null);
+  const [carregandoComparacao, setCarregandoComparacao] = useState(false);
 
   const carregar = useCallback(async () => {
-    const [v, c, ca] = await Promise.all([
+    const [v, c, ca, p] = await Promise.all([
       api<Vaga>(`/vagas/${codVag}`),
       api<Candidatura[]>(`/vagas/${codVag}/candidaturas`),
       api<Canal[]>("/canais"),
+      api<PerfilComportamental | null>(`/vagas/${codVag}/perfil-comportamental`),
     ]);
     if (v.status === 200 && v.json) setVaga(v.json);
     if (c.status === 200 && c.json) setCandidaturas(c.json);
     if (ca.status === 200 && ca.json) setCanais(ca.json);
+    if (p.status === 200) {
+      setPerfilComportamental(p.json);
+      if (p.json) {
+        const preenchido: typeof perfilForm = {};
+        for (const f of p.json.fatores) {
+          preenchido[f.fator.sigla] = {
+            incluir: true,
+            minimo: String(f.minimo),
+            maximo: String(f.maximo),
+            eliminatorio: f.eliminatorio === "S",
+          };
+        }
+        setPerfilForm(preenchido);
+      }
+    }
   }, [codVag]);
 
   useEffect(() => {
@@ -104,15 +195,50 @@ export default function PipelineVaga() {
     await carregar();
   }
 
-  async function iniciarAdmissao(codCdt: string) {
-    setIniciandoAdmissao(codCdt);
-    const r = await api(`/candidaturas/${codCdt}/admissao/iniciar`, { metodo: "POST" });
-    setIniciandoAdmissao(null);
+  function alternarSelecaoComparar(codCdt: string) {
+    setSelecionadosComparar((atual) => {
+      if (atual.includes(codCdt)) return atual.filter((c) => c !== codCdt);
+      if (atual.length >= 5) {
+        alert("É possível comparar até 5 candidatos por vez.");
+        return atual;
+      }
+      return [...atual, codCdt];
+    });
+  }
+
+  async function abrirComparacao() {
+    setCarregandoComparacao(true);
+    const selecionados = candidaturas.filter((c) => selecionadosComparar.includes(c.codCdt));
+    const respostas = await Promise.all(
+      selecionados.map((c) => api<DetalheComportamental>(`/candidaturas/${c.codCdt}/avaliacao-comportamental`)),
+    );
+    setCarregandoComparacao(false);
+    const dados = respostas
+      .map((r, i) => (r.status === 200 && r.json ? { nomeCand: selecionados[i].candidato.nomeCand, dados: r.json } : null))
+      .filter((x): x is { nomeCand: string; dados: DetalheComportamental } => x !== null);
+    setComparacao(dados);
+  }
+
+  async function salvarPerfilComportamental(e: React.FormEvent) {
+    e.preventDefault();
+    setSalvandoPerfil(true);
+    const fatores = FATORES_COMPORTAMENTAIS.filter((f) => perfilForm[f.sigla]?.incluir).map((f) => {
+      const v = perfilForm[f.sigla];
+      return {
+        sigla: f.sigla,
+        minimo: Number(v.minimo || 0),
+        maximo: Number(v.maximo || 100),
+        eliminatorio: v.eliminatorio ? "S" : "N",
+      };
+    });
+    const r = await api(`/vagas/${codVag}/perfil-comportamental`, { metodo: "POST", corpo: { fatores } });
+    setSalvandoPerfil(false);
     if (r.status !== 201) {
-      alert("Não foi possível iniciar a admissão.");
+      alert("Não foi possível salvar o perfil comportamental.");
       return;
     }
-    rotear.push(`/app/recrutamento/admissao/${codCdt}`);
+    setPerfilAberta(false);
+    await carregar();
   }
 
   async function candidatar(e: React.FormEvent) {
@@ -170,9 +296,25 @@ export default function PipelineVaga() {
             Pipeline · {candidaturas.length} candidatura(s)
           </p>
         </div>
-        <BotaoPrimario onClick={() => setAberta(true)} disabled={vaga.status !== "ABERTA"}>
-          Nova candidatura
-        </BotaoPrimario>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setPerfilAberta(true)}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: "1px solid var(--border-default)",
+              background: "var(--surface-default)",
+              fontSize: 14,
+              cursor: "pointer",
+              font: "inherit",
+            }}
+          >
+            Perfil comportamental{perfilComportamental && " ✓"}
+          </button>
+          <BotaoPrimario onClick={() => setAberta(true)} disabled={vaga.status !== "ABERTA"}>
+            Nova candidatura
+          </BotaoPrimario>
+        </div>
       </header>
 
       <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
@@ -195,111 +337,111 @@ export default function PipelineVaga() {
                 <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>{itens.length}</span>
               </div>
               <div style={{ display: "grid", gap: 8 }}>
-                {itens.map((c) => (
-                  <div
-                    key={c.codCdt}
-                    style={{
-                      background: "var(--surface-default)",
-                      border: "1px solid var(--border-default)",
-                      borderRadius: 8,
-                      padding: 10,
-                      fontSize: 13,
-                    }}
-                  >
-                    <div style={{ fontWeight: 600 }}>{c.candidato.nomeCand}</div>
-                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>{c.candidato.email}</div>
-                    <div style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 4 }}>
-                      via {c.canal.nomeCanal}
-                      {c.match && (
-                        <span
-                          title={[
-                            `Contratação: ${c.match.scoreContratacao}`,
-                            c.match.scoreCultura != null ? `Fit cultural: ${c.match.scoreCultura}` : null,
-                            c.match.driverPrincipal ? `Ponto forte: ${c.match.driverPrincipal}` : null,
-                            c.match.qtdGapsCrit > 0 ? `${c.match.qtdGapsCrit} gap(s) crítico(s)` : null,
-                          ].filter(Boolean).join(" · ")}
-                        >
-                          {" "}· score {c.match.scoreGeral}
-                          {c.match.qtdGapsCrit > 0 && " ⚠"}
-                        </span>
-                      )}
-                    </div>
-                    {c.knockoutJson && (
-                      <div
-                        title={`Resposta eliminatória em "${c.knockoutJson.pergunta}" — decisão é sua`}
-                        style={{
-                          marginTop: 6,
-                          display: "inline-block",
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          background: "var(--amber-100, #F2E3C4)",
-                          color: "var(--amber-700, #714E08)",
-                        }}
-                      >
-                        ⚠ Eliminaria na triagem
-                      </div>
-                    )}
-                    <Selecao
-                      value={c.estagio}
-                      onChange={(e) => moverEstagio(c.codCdt, e.target.value)}
-                      style={{ marginTop: 8, fontSize: 12, padding: "4px 6px" }}
+                {itens.map((c) => {
+                  const convite = c.convitesComportamentais[0];
+                  const comportamentalConcluido = convite?.sessao?.resultado;
+                  const corScore =
+                    c.match == null ? null
+                    : c.match.scoreGeral >= 75 ? { bg: "var(--green-100, #D6E9DF)", fg: "var(--green-700, #1D533B)" }
+                    : c.match.scoreGeral >= 50 ? { bg: "var(--amber-100, #F2E3C4)", fg: "var(--amber-700, #714E08)" }
+                    : { bg: "var(--red-100, #F4D9D6)", fg: "var(--red-700, #7A2A25)" };
+                  return (
+                    <div
+                      key={c.codCdt}
+                      onClick={() => setDrawerCodCdt(c.codCdt)}
+                      style={{
+                        background: "var(--surface-default)",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: 8,
+                        padding: 10,
+                        fontSize: 13,
+                        cursor: "pointer",
+                      }}
                     >
-                      {TODOS_ESTAGIOS.map((e) => (
-                        <option key={e.chave} value={e.chave}>{e.rotulo}</option>
-                      ))}
-                    </Selecao>
-
-                    {col.chave === "hired" && (
-                      <div style={{ marginTop: 8 }}>
-                        {c.codFun ? (
+                      <div style={{ fontWeight: 600 }}>{c.candidato.nomeCand}</div>
+                      <div style={{ color: "var(--text-muted)", fontSize: 11 }}>via {c.canal.nomeCanal}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                        {corScore && (
                           <span
-                            style={{
-                              display: "inline-block",
-                              padding: "2px 8px",
-                              borderRadius: 999,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              background: "var(--green-100, #D6E9DF)",
-                              color: "var(--green-700, #1D533B)",
-                            }}
+                            title={`Score de match: ${c.match!.scoreGeral}${c.match!.qtdGapsCrit > 0 ? ` · ${c.match!.qtdGapsCrit} gap(s) crítico(s)` : ""}`}
+                            style={{ padding: "2px 7px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: corScore.bg, color: corScore.fg }}
                           >
-                            Admitido
+                            {c.match!.scoreGeral}
                           </span>
-                        ) : c.processoAdmissao ? (
-                          <Link
-                            href={`/app/recrutamento/admissao/${c.codCdt}`}
-                            style={{ fontSize: 12, color: "var(--text-link)" }}
+                        )}
+                        {c.knockoutJson && <span title={`Resposta eliminatória em "${c.knockoutJson.pergunta}"`}>⚠️</span>}
+                        {comportamentalConcluido ? (
+                          <span title="Avaliação comportamental concluída">
+                            🧭 {comportamentalConcluido.aderencias[0]?.aderenciaGeral ?? ""}
+                          </span>
+                        ) : convite ? (
+                          <span title={`Avaliação comportamental: ${ROTULO_STATUS_CONVITE[convite.status] ?? convite.status}`} style={{ opacity: 0.5 }}>
+                            🧭
+                          </span>
+                        ) : null}
+                        {comportamentalConcluido && (
+                          <label
+                            title="Selecionar para comparar"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ display: "flex", alignItems: "center", cursor: "pointer", marginLeft: "auto" }}
                           >
-                            Admissão: {ROTULO_STATUS_ADMISSAO[c.processoAdmissao.status] ?? c.processoAdmissao.status}
-                          </Link>
-                        ) : (
-                          <button
-                            onClick={() => iniciarAdmissao(c.codCdt)}
-                            disabled={iniciandoAdmissao === c.codCdt}
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              border: "1px solid var(--border-default)",
-                              background: "var(--surface-default)",
-                              fontSize: 12,
-                              cursor: "pointer",
-                              font: "inherit",
-                            }}
-                          >
-                            {iniciandoAdmissao === c.codCdt ? "Iniciando..." : "Iniciar Admissão"}
-                          </button>
+                            <input
+                              type="checkbox"
+                              checked={selecionadosComparar.includes(c.codCdt)}
+                              onChange={() => alternarSelecaoComparar(c.codCdt)}
+                            />
+                          </label>
                         )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <Selecao
+                        value={c.estagio}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => moverEstagio(c.codCdt, e.target.value)}
+                        style={{ marginTop: 8, fontSize: 12, padding: "4px 6px" }}
+                      >
+                        {TODOS_ESTAGIOS.map((e) => (
+                          <option key={e.chave} value={e.chave}>{e.rotulo}</option>
+                        ))}
+                      </Selecao>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
+
+      {selecionadosComparar.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 20,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "var(--surface-default)",
+            border: "1px solid var(--border-default)",
+            borderRadius: 10,
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            boxShadow: "0 4px 16px rgba(0,0,0,.15)",
+            zIndex: 40,
+          }}
+        >
+          <span style={{ fontSize: 13 }}>{selecionadosComparar.length} selecionado(s) para comparar</span>
+          <button
+            onClick={() => setSelecionadosComparar([])}
+            style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13 }}
+          >
+            Limpar
+          </button>
+          <BotaoPrimario onClick={abrirComparacao} disabled={selecionadosComparar.length < 2 || carregandoComparacao}>
+            {carregandoComparacao ? "Carregando..." : "Comparar"}
+          </BotaoPrimario>
+        </div>
+      )}
 
       {candidaturas.some((c) => ESTAGIOS_TERMINAIS.some((e) => e.chave === c.estagio)) && (
         <div style={{ marginTop: 20 }}>
@@ -439,6 +581,137 @@ export default function PipelineVaga() {
           </BotaoPrimario>
         </form>
       </Gaveta>
+
+      <Gaveta titulo="Perfil comportamental da vaga" aberta={perfilAberta} fechar={() => setPerfilAberta(false)}>
+        <form onSubmit={salvarPerfilComportamental} style={{ display: "grid", gap: 14 }}>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+            Faixa desejada (0-100) por fator. Marque só os fatores relevantes para esta vaga — os demais ficam de fora da aderência.
+          </p>
+          {FATORES_COMPORTAMENTAIS.map((f) => {
+            const v = perfilForm[f.sigla] ?? { incluir: false, minimo: "", maximo: "", eliminatorio: false };
+            const atualizar = (patch: Partial<typeof v>) => setPerfilForm({ ...perfilForm, [f.sigla]: { ...v, ...patch } });
+            return (
+              <div key={f.sigla} style={{ border: "1px solid var(--border-default)", borderRadius: 8, padding: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
+                  <input type="checkbox" checked={v.incluir} onChange={(e) => atualizar({ incluir: e.target.checked })} />
+                  {f.rotulo}
+                </label>
+                {v.incluir && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                    <Campo rotulo="Mínimo">
+                      <Entrada type="number" min={0} max={100} value={v.minimo} onChange={(e) => atualizar({ minimo: e.target.value })} />
+                    </Campo>
+                    <Campo rotulo="Máximo">
+                      <Entrada type="number" min={0} max={100} value={v.maximo} onChange={(e) => atualizar({ maximo: e.target.value })} />
+                    </Campo>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, gridColumn: "1 / -1" }}>
+                      <input type="checkbox" checked={v.eliminatorio} onChange={(e) => atualizar({ eliminatorio: e.target.checked })} />
+                      Fora da faixa elimina o candidato
+                    </label>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <BotaoPrimario type="submit" disabled={salvandoPerfil}>
+            {salvandoPerfil ? "Salvando..." : "Salvar perfil comportamental"}
+          </BotaoPrimario>
+        </form>
+      </Gaveta>
+
+      <Gaveta
+        titulo="Comparar candidatos — Avaliação comportamental"
+        aberta={!!comparacao}
+        fechar={() => setComparacao(null)}
+        largura={comparacao ? 160 + comparacao.length * 150 : 640}
+      >
+        {comparacao && (() => {
+          const linhas = comparacao.map((c) => ({
+            nomeCand: c.nomeCand,
+            resultado: c.dados.sessao?.resultado ?? null,
+          }));
+          const comAderencia = linhas.filter((l) => l.resultado?.aderencias[0]);
+          const maiorAderencia =
+            comAderencia.length > 0
+              ? comAderencia.reduce((max, l) => (l.resultado!.aderencias[0].aderenciaGeral > max.resultado!.aderencias[0].aderenciaGeral ? l : max))
+              : null;
+          const comAtencao = linhas.filter((l) => l.resultado && l.resultado.indicadorConsistencia !== "ADEQUADA");
+
+          const estiloCelula: React.CSSProperties = { padding: "8px 10px", fontSize: 12, borderBottom: "1px solid var(--border-default)" };
+          const estiloCabecalho: React.CSSProperties = { ...estiloCelula, fontWeight: 600, textAlign: "left", verticalAlign: "bottom" };
+
+          return (
+            <div style={{ display: "grid", gap: 14 }}>
+              {maiorAderencia && (
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  Mais aderente à vaga: <strong style={{ color: "var(--text-body)" }}>{maiorAderencia.nomeCand}</strong>
+                  {" "}({maiorAderencia.resultado!.aderencias[0].aderenciaGeral})
+                </div>
+              )}
+              {comAtencao.length > 0 && (
+                <div style={{ fontSize: 12, color: "var(--amber-700, #714E08)" }}>
+                  ⚠ Consistência sinalizada: {comAtencao.map((l) => l.nomeCand).join(", ")}
+                </div>
+              )}
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={estiloCabecalho}></th>
+                      {linhas.map((l) => (
+                        <th key={l.nomeCand} style={estiloCabecalho}>{l.nomeCand}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ ...estiloCelula, fontWeight: 600 }}>Aderência geral</td>
+                      {linhas.map((l) => {
+                        const valor = l.resultado?.aderencias[0]?.aderenciaGeral;
+                        const ehMaior = valor != null && maiorAderencia && l.nomeCand === maiorAderencia.nomeCand;
+                        return (
+                          <td key={l.nomeCand} style={{ ...estiloCelula, fontWeight: ehMaior ? 700 : 400, color: ehMaior ? "var(--green-700, #1D533B)" : undefined }}>
+                            {valor ?? "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td style={{ ...estiloCelula, fontWeight: 600 }}>Consistência</td>
+                      {linhas.map((l) => (
+                        <td key={l.nomeCand} style={{ ...estiloCelula, color: l.resultado && l.resultado.indicadorConsistencia !== "ADEQUADA" ? "var(--amber-700, #714E08)" : undefined }}>
+                          {l.resultado ? (ROTULO_CONSISTENCIA[l.resultado.indicadorConsistencia]?.split(" (")[0] ?? l.resultado.indicadorConsistencia) : "—"}
+                        </td>
+                      ))}
+                    </tr>
+                    {FATORES_COMPORTAMENTAIS.map((f) => {
+                      const valores = linhas.map((l) => l.resultado?.fatores.find((x) => x.fator.sigla === f.sigla)?.percentualNormalizado ?? null);
+                      const maiorValor = Math.max(...valores.filter((v): v is number => v != null));
+                      return (
+                        <tr key={f.sigla}>
+                          <td style={{ ...estiloCelula, fontWeight: 600 }}>{f.rotulo}</td>
+                          {linhas.map((l, i) => {
+                            const rf = l.resultado?.fatores.find((x) => x.fator.sigla === f.sigla);
+                            const ehMaior = valores[i] != null && valores[i] === maiorValor;
+                            return (
+                              <td key={l.nomeCand} style={{ ...estiloCelula, fontWeight: ehMaior ? 700 : 400, color: ehMaior ? "var(--green-700, #1D533B)" : undefined }}>
+                                {rf ? `${rf.percentualNormalizado}% · ${ROTULO_FAIXA[rf.faixaInterpretativa] ?? rf.faixaInterpretativa}` : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+      </Gaveta>
+
+      <CandidatoDrawer codCdt={drawerCodCdt} fechar={() => setDrawerCodCdt(null)} aoAtualizar={carregar} />
     </main>
   );
 }

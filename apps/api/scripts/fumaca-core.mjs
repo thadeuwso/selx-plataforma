@@ -413,6 +413,20 @@ verificar("telefone prefill a partir do currículo (heurística)", diana?.fone =
 const curriculosLista = await http("GET", `/candidatos/${candDiana.json?.codCand}/curriculo`, null, tokenA2);
 verificar("lista currículos do candidato (1)", curriculosLista.status === 200 && curriculosLista.json?.length === 1);
 
+const codCandCvDiana = curriculosLista.json?.[0]?.codCandCv;
+const arquivoRes = await fetch(`${base}/candidatos/${candDiana.json?.codCand}/curriculo/${codCandCvDiana}/arquivo`, {
+  headers: { authorization: `Bearer ${tokenA2}` },
+});
+const arquivoTexto = await arquivoRes.text().catch(() => "");
+verificar(
+  "baixa o arquivo original do currículo (mesmo conteúdo enviado)",
+  arquivoRes.status === 200 && arquivoRes.headers.get("content-type")?.includes("text/plain") && arquivoTexto.includes("Diana Rocha"),
+);
+const arquivoResB = await fetch(`${base}/candidatos/${candDiana.json?.codCand}/curriculo/${codCandCvDiana}/arquivo`, {
+  headers: { authorization: `Bearer ${tokenB}` },
+});
+verificar("tenant B não baixa currículo do candidato do tenant A → 400", arquivoResB.status === 400);
+
 // 15. RN-REC-007: hired -> proposta de admissão -> confirmar-admissão no Core
 const cdtAdm = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
   candidato: { nomeCand: "Diana Rocha", email: `diana.${rodada}@mail.com` },
@@ -731,6 +745,23 @@ verificar(
   "vaga sem requisitos não gera match (nada a medir)",
   pipelineSemReq.json?.find((c) => c.codCdt === cdtSemRequisitos.json?.codCdt)?.match == null,
 );
+
+// 20b. Detalhe da candidatura (painel do candidato no pipeline redesenhado)
+const detalheCdtForte = await http("GET", `/candidaturas/${cdtForte.json?.codCdt}`, null, tokenA2);
+verificar(
+  "detalhe da candidatura traz candidato, vaga com requisitos e match",
+  detalheCdtForte.status === 200 &&
+    detalheCdtForte.json?.candidato?.nomeCand === "Beatriz Forte" &&
+    detalheCdtForte.json?.vaga?.requisitos?.length === 2 &&
+    detalheCdtForte.json?.match?.scoreGeral === matchForte?.scoreGeral,
+);
+const reqAvaliadoObrigatorio = detalheCdtForte.json?.requisitosAvaliados?.find((r) => r.codVagReq === reqObrigatorio?.codVagReq);
+verificar(
+  "quebra por requisito calculada ao vivo (candidata forte pontua alto no obrigatório)",
+  reqAvaliadoObrigatorio?.scorePct >= 90 && reqAvaliadoObrigatorio?.nivelInformado === 4,
+);
+const detalheCdtForteB = await http("GET", `/candidaturas/${cdtForte.json?.codCdt}`, null, tokenB);
+verificar("tenant B não vê detalhe de candidatura do tenant A → 400", detalheCdtForteB.status === 400);
 
 // 21. Gestão de Pessoas — Avaliação Comportamental (DIR/CON/SUS/PRE, sem IA)
 const vagaComp = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Comportamental" }, tokenA2);

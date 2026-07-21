@@ -6,11 +6,13 @@ export function Gaveta({
   titulo,
   aberta,
   fechar,
+  largura = 420,
   children,
 }: {
   titulo: string;
   aberta: boolean;
   fechar: () => void;
+  largura?: number;
   children: ReactNode;
 }) {
   if (!aberta) return null;
@@ -22,7 +24,7 @@ export function Gaveta({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 420,
+          width: largura,
           maxWidth: "90vw",
           background: "var(--surface-default)",
           height: "100%",
@@ -101,4 +103,39 @@ export function BotaoPrimario(props: React.ButtonHTMLAttributes<HTMLButtonElemen
 export function Erro({ mensagem }: { mensagem: string | null }) {
   if (!mensagem) return null;
   return <div style={{ color: "var(--red-600, #9A3833)", fontSize: 13 }}>{mensagem}</div>;
+}
+
+export function Abas({
+  ativa,
+  aoMudar,
+  abas,
+}: {
+  ativa: string;
+  aoMudar: (id: string) => void;
+  abas: { id: string; rotulo: string }[];
+}) {
+  return (
+    <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-default)" }}>
+      {abas.map((a) => (
+        <button
+          key={a.id}
+          onClick={() => aoMudar(a.id)}
+          style={{
+            padding: "8px 12px",
+            border: "none",
+            borderBottom: a.id === ativa ? "2px solid var(--brand-700)" : "2px solid transparent",
+            background: "none",
+            color: a.id === ativa ? "var(--text-body)" : "var(--text-muted)",
+            fontWeight: a.id === ativa ? 600 : 400,
+            fontSize: 13,
+            cursor: "pointer",
+            font: "inherit",
+            marginBottom: -1,
+          }}
+        >
+          {a.rotulo}
+        </button>
+      ))}
+    </div>
+  );
 }

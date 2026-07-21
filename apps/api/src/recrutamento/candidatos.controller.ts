@@ -8,6 +8,7 @@ import { FuncionariosService } from '../core/funcionarios/funcionarios.service';
 import {
   calcularHashEntrada,
   calcularMatch,
+  calcularScoreRequisito,
   type AutoavaliacaoResp,
   type PerfilCultural,
 } from './calcular-match';
@@ -370,9 +371,78 @@ export class CandidatosController {
             select: { scoreGeral: true, scoreContratacao: true, scoreCultura: true, driverPrincipal: true, qtdGapsCrit: true },
           },
           processoAdmissao: { select: { status: true } },
+          convitesComportamentais: {
+            orderBy: { codConv: 'desc' },
+            take: 1,
+            select: {
+              tokenPub: true,
+              status: true,
+              sessao: {
+                select: {
+                  dhConclusao: true,
+                  resultado: {
+                    select: {
+                      indicadorConsistencia: true,
+                      aderencias: { select: { aderenciaGeral: true }, take: 1 },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       }),
     );
+  }
+
+  /** Detalhe completo de uma candidatura — alimenta o painel de detalhe do candidato no pipeline. */
+  @Get('candidaturas/:codCdt')
+  @Permissoes('recrutamento.candidatos.ler')
+  detalheCandidatura(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cdt = await tx.candidatura.findFirst({
+        where: { codCdt: BigInt(codCdt), ativo: 'S' },
+        include: {
+          candidato: true,
+          canal: { select: { nomeCanal: true } },
+          vaga: { select: { codVag: true, titulo: true, perfilCulturalIdealJson: true, requisitos: true } },
+          match: true,
+          processoAdmissao: { select: { status: true } },
+        },
+      });
+      if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
+
+      const autoavaliacoes = (cdt.autoavaliacaoJson as Record<string, AutoavaliacaoResp> | null) ?? {};
+      const requisitosAvaliados = cdt.vaga.requisitos.map((r) => {
+        const resp = autoavaliacoes[r.codVagReq.toString()];
+        return {
+          codVagReq: r.codVagReq,
+          descrReq: r.descrReq,
+          tipoReq: r.tipoReq,
+          peso: r.peso,
+          nivelEsperado: r.nivelEsperado,
+          tempoEspMeses: r.tempoEspMeses,
+          nivelInformado: resp?.nivel ?? null,
+          tempoInformado: resp?.tempoMeses ?? null,
+          evidenciaTexto: resp?.evidenciaTexto ?? null,
+          scorePct: Math.round(
+            calcularScoreRequisito(
+              {
+                codVagReq: r.codVagReq.toString(),
+                descrReq: r.descrReq,
+                tipoReq: r.tipoReq as 'OBRIGATORIO' | 'DESEJAVEL',
+                peso: r.peso,
+                nivelEsperado: r.nivelEsperado,
+                tempoEspMeses: r.tempoEspMeses,
+              },
+              resp,
+            ) * 100,
+          ),
+        };
+      });
+
+      return { ...cdt, requisitosAvaliados };
+    });
   }
 
   /** Move a candidatura de estágio, gravando a timeline (RN-REC-005). Transições são humanas. */

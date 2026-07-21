@@ -5,15 +5,25 @@ import {
   Param,
   Post,
   Req,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { createReadStream } from 'node:fs';
+import path from 'node:path';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
-import { salvarCurriculo } from './armazenamento-curriculo';
+import { diretorioUploads, salvarCurriculo } from './armazenamento-curriculo';
 import { detectarContatoNoTexto, extrairTextoCurriculo, tipoArquivoAceito } from './curriculo-extracao';
+
+const MIME_POR_EXTENSAO: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain',
+};
 
 const TAMANHO_MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
@@ -33,6 +43,31 @@ export class CurriculosController {
         select: { codCandCv: true, arquivo: true, dhInc: true, textoExtraido: true },
       }),
     );
+  }
+
+  /** Serve o arquivo original armazenado (v1 nunca teve download — só upload + texto extraído). */
+  @Get(':codCandCv/arquivo')
+  @Permissoes('recrutamento.candidatos.ler')
+  async baixarArquivo(
+    @Req() req: ReqAut,
+    @Param('codCand') codCand: string,
+    @Param('codCandCv') codCandCv: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const registro = await this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      tx.candidatoCurriculo.findFirst({
+        where: { codCandCv: BigInt(codCandCv), codCand: BigInt(codCand) },
+      }),
+    );
+    if (!registro) throw new BadRequestException('Currículo inexistente neste tenant');
+
+    const caminhoCompleto = path.join(diretorioUploads(), registro.arquivo);
+    const extensao = path.extname(registro.arquivo).toLowerCase();
+    res.set({
+      'Content-Type': MIME_POR_EXTENSAO[extensao] ?? 'application/octet-stream',
+      'Content-Disposition': `inline; filename="curriculo${extensao}"`,
+    });
+    return new StreamableFile(createReadStream(caminhoCompleto));
   }
 
   /** Upload + extração de texto (PDF/DOCX/TXT). Nunca via IA — extração é mecânica. */

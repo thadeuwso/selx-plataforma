@@ -103,6 +103,50 @@ export function calcularResultadoPorFator(respostas: RespostaFator[]): Resultado
   });
 }
 
+export interface RespostaFaceta extends RespostaFator {
+  faceta: string;
+}
+
+export interface ResultadoFaceta {
+  codFat: string;
+  faceta: string;
+  percentualNormalizado: number;
+  quantidade: number;
+}
+
+/**
+ * Mesma agregação de `calcularResultadoPorFator`, só que na granularidade da
+ * faceta (RN-GP-006 detalhamento) — explica *onde dentro do fator* a resposta
+ * do candidato puxou o resultado pra cima ou pra baixo. Não é persistido —
+ * calculado sob demanda a partir das respostas já salvas.
+ */
+export function calcularResultadoPorFaceta(respostas: RespostaFaceta[]): ResultadoFaceta[] {
+  const porFaceta = new Map<string, RespostaFaceta[]>();
+  for (const r of respostas) {
+    const chave = `${r.codFat}::${r.faceta}`;
+    if (!porFaceta.has(chave)) porFaceta.set(chave, []);
+    porFaceta.get(chave)!.push(r);
+  }
+
+  return Array.from(porFaceta.values()).map((itens) => {
+    const pontosPorItem = itens.map((r) => calcularPontosResposta(r.valor, r.tipo, r.peso));
+    const pontuacaoBruta = pontosPorItem.reduce((s, v) => s + v, 0);
+    const minimoPossivel = itens.reduce((s, r) => s + 1 * r.peso, 0);
+    const maximoPossivel = itens.reduce((s, r) => s + 5 * r.peso, 0);
+    const percentualNormalizado =
+      maximoPossivel > minimoPossivel
+        ? ((pontuacaoBruta - minimoPossivel) / (maximoPossivel - minimoPossivel)) * 100
+        : 0;
+
+    return {
+      codFat: itens[0].codFat,
+      faceta: itens[0].faceta,
+      percentualNormalizado,
+      quantidade: itens.length,
+    };
+  });
+}
+
 /**
  * Indicadores de consistência (versão simplificada do v1 — ver Motor de
  * Pontuação §4): % neutras, % na alternativa mais frequente. Nunca reprova

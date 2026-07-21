@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { randomBytes } from 'node:crypto';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
+import { calcularResultadoPorFaceta, type RespostaFaceta } from './calcular-resultado';
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 
@@ -70,6 +71,7 @@ export class AvaliacaoComportamentalController {
                 include: {
                   fatores: { include: { fator: true } },
                   aderencias: { include: { fatores: { include: { fator: true } } } },
+                  iaResumos: { where: { status: 'OK' }, orderBy: { codIaResumo: 'desc' } },
                 },
               },
             },
@@ -77,7 +79,22 @@ export class AvaliacaoComportamentalController {
         },
       });
       if (!convite) throw new BadRequestException('Nenhum convite de avaliação comportamental para esta candidatura');
-      return convite;
+      if (!convite.sessao?.resultado) return { ...convite, facetas: [] };
+
+      const respostas = await tx.respostaComportamental.findMany({
+        where: { codSes: convite.sessao.codSes },
+        include: { pergunta: { include: { fator: true } }, escala: true },
+      });
+      const respostasFaceta: RespostaFaceta[] = respostas.map((r) => ({
+        codFat: r.pergunta.fator.sigla,
+        faceta: r.pergunta.categoria ?? 'Geral',
+        tipo: r.pergunta.tipo as 'DIRETA' | 'REVERSA',
+        peso: Number(r.pergunta.peso),
+        valor: r.escala.valor,
+      }));
+      const facetas = calcularResultadoPorFaceta(respostasFaceta);
+
+      return { ...convite, facetas };
     });
   }
 }
