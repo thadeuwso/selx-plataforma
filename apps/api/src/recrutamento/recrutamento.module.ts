@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DocumentosModule } from '../core/documentos/documentos.module';
 import { FuncionariosModule } from '../core/funcionarios/funcionarios.module';
 import { AdmissaoProcessoController } from './admissao-processo.controller';
+import { AcompanhamentoPublicoController } from './acompanhamento-publico.controller';
 import { AdmissaoPublicoController } from './admissao-publico.controller';
 import { AdmissoesListaController } from './admissoes-lista.controller';
 import { CandidatosController } from './candidatos.controller';
@@ -18,6 +19,7 @@ import { VagasController } from './vagas.controller';
     CurriculosController,
     AdmissaoProcessoController,
     AdmissaoPublicoController,
+    AcompanhamentoPublicoController,
     AdmissoesListaController,
   ],
 })

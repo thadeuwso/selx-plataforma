@@ -1065,6 +1065,31 @@ verificar(
   modelosA.json?.some((m) => m.codTen === null) && modelosA.json?.some((m) => m.codMod === modeloProprio.json?.codMod),
 );
 
+// 29. Portal de acompanhamento do candidato (sem login)
+const linkAcomp = await http("POST", `/candidaturas/${cdtComRisco.json?.codCdt}/link-acompanhamento`, {}, tokenA2);
+verificar("gera link de acompanhamento (201)", linkAcomp.status === 201 && !!linkAcomp.json?.tokenPub);
+const linkAcompDeNovo = await http("POST", `/candidaturas/${cdtComRisco.json?.codCdt}/link-acompanhamento`, {}, tokenA2);
+verificar("gerar o link de novo é idempotente", linkAcompDeNovo.json?.tokenPub === linkAcomp.json?.tokenPub);
+
+const acomp = await http("GET", `/acompanhamento/publico/${linkAcomp.json?.tokenPub}`);
+verificar(
+  "candidato acompanha o processo sem login, com estágio traduzido",
+  acomp.status === 200 && typeof acomp.json?.estagio?.rotulo === "string" && !!acomp.json?.vaga?.titulo,
+);
+
+// Este candidato tem knockout sinalizado e nota interna — nada disso pode aparecer.
+const acompBruto = JSON.stringify(acomp.json);
+verificar(
+  "portal público não vaza dado interno (knockout, score, nota, estágio técnico)",
+  !acompBruto.includes("knockout") &&
+    !/"scoreGeral"|"scoreContratacao"|"qtdGapsCrit"/.test(acompBruto) &&
+    !acompBruto.includes("notaInterna") &&
+    !acompBruto.includes('"applied"'),
+);
+
+const acompInvalido = await http("GET", "/acompanhamento/publico/token-inexistente-abc");
+verificar("token de acompanhamento inválido → 400", acompInvalido.status === 400);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

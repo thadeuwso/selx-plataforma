@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { randomBytes } from 'node:crypto';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import type { Prisma } from '@prisma/client';
@@ -542,6 +543,27 @@ export class CandidatosController {
         },
       });
       return atualizada;
+    });
+  }
+
+  /**
+   * Gera (ou devolve) o link do portal de acompanhamento do candidato.
+   * Sob demanda, para não criar token em candidatura que ninguém vai acompanhar.
+   */
+  @Post('candidaturas/:codCdt/link-acompanhamento')
+  @Permissoes('recrutamento.candidatos.ler')
+  linkAcompanhamento(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cdt = await tx.candidatura.findFirst({ where: { codCdt: BigInt(codCdt), ativo: 'S' } });
+      if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
+      if (cdt.tokenPub) return { tokenPub: cdt.tokenPub };
+
+      const atualizada = await tx.candidatura.update({
+        where: { codCdt: cdt.codCdt },
+        data: { tokenPub: randomBytes(24).toString('hex') },
+        select: { tokenPub: true },
+      });
+      return { tokenPub: atualizada.tokenPub };
     });
   }
 

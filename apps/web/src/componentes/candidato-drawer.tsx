@@ -330,6 +330,23 @@ export function CandidatoDrawer({
     rotear.push(`/app/recrutamento/admissao/${codCdt}`);
   }
 
+  /** Link único do candidato: acompanha o processo e reúne o que está pendente dele. */
+  async function copiarLinkAcompanhamento() {
+    if (!codCdt) return;
+    const r = await api<{ tokenPub: string }>(`/candidaturas/${codCdt}/link-acompanhamento`, { metodo: "POST" });
+    if (r.status !== 201 || !r.json) {
+      alert("Não foi possível gerar o link de acompanhamento.");
+      return;
+    }
+    const url = `${window.location.origin}/acompanhar/${r.json.tokenPub}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      alert(`Link copiado para a área de transferência:\n${url}`);
+    } catch {
+      alert(`Link de acompanhamento:\n${url}`);
+    }
+  }
+
   async function recarregarComportamental() {
     if (!codCdt) return;
     const r = await api<DetalheComportamental>(`/candidaturas/${codCdt}/avaliacao-comportamental`);
@@ -367,7 +384,17 @@ export function CandidatoDrawer({
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{detalhe.candidato.email} · via {detalhe.canal.nomeCanal}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {detalhe.candidato.email} · via {detalhe.canal.nomeCanal}
+              {" · "}
+              <button
+                onClick={copiarLinkAcompanhamento}
+                title="Link onde o candidato acompanha o processo e vê o que está pendente"
+                style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 12, padding: 0 }}
+              >
+                copiar link de acompanhamento
+              </button>
+            </div>
             {detalhe.candidato.cidade && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{detalhe.candidato.cidade}</div>}
           </div>
 

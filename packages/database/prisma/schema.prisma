@@ -646,6 +646,9 @@ model Candidatura {
   codVag        BigInt   @map("CODVAG")
   codCand       BigInt   @map("CODCAND")
   estagio       String   @default("applied") @map("ESTAGIO")
+  /// Token opaco do portal de acompanhamento do candidato (ADR-0004 §5).
+  /// Gerado sob demanda pelo RH — candidatura antiga fica sem até alguém pedir o link.
+  tokenPub      String?  @unique @map("TOKENPUB")
   codCanal      BigInt   @map("CODCANAL")
   idExterno     String?  @map("IDEXTERNO")
   codFun        BigInt?  @map("CODFUN") // RN-REC-007: preenchido ao confirmar admissao no Core
