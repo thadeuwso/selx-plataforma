@@ -72,7 +72,7 @@ export class BancoPerguntasController {
   async listarModelos(@Req() req: ReqAut) {
     return this.prisma.admin.modeloAvaliacaoComportamental.findMany({
       where: { OR: [{ codTen: req.usuario.codTen }, { codTen: null }] },
-      orderBy: [{ codTen: 'desc' }, { versao: 'desc' }],
+      orderBy: [{ codTen: { sort: 'desc', nulls: 'last' } }, { versao: 'desc' }],
       select: {
         codMod: true,
         codTen: true,

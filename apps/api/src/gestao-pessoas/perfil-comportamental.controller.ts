@@ -72,7 +72,7 @@ export class PerfilComportamentalController {
       const modeloPadrao = await tx.modeloAvaliacaoComportamental.findFirst({
         // Questionário próprio do tenant tem prioridade; se não houver, cai no da plataforma.
         where: { status: 'PUBLICADO', OR: [{ codTen: req.usuario.codTen }, { codTen: null }] },
-        orderBy: [{ codTen: 'desc' }, { versao: 'desc' }],
+        orderBy: [{ codTen: { sort: 'desc', nulls: 'last' } }, { versao: 'desc' }],
       });
       if (!modeloPadrao) throw new BadRequestException('Nenhum modelo de avaliação comportamental publicado');
 

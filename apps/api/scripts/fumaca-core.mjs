@@ -1059,6 +1059,23 @@ verificar(
   consultaIsol.json?.totalPerguntas === 48,
 );
 
+// A outra metade da mesma regra: isolar B não basta, o questionário próprio de A
+// precisa de fato virar o padrão de A. Sem este cenário, um erro de ordenação
+// (NULL primeiro no `codTen desc`) deixa A preso no questionário da plataforma e
+// o teste acima continua verde.
+const vagaPropria = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Questionário Próprio" }, tokenA2);
+await http("PATCH", `/vagas/${vagaPropria.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaPropria.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtPropria = await http("POST", `/vagas/${vagaPropria.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Candidato Próprio", email: `proprio.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+const convPropria = await http("POST", `/candidaturas/${cdtPropria.json?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
+const consultaPropria = await http("GET", `/avaliacao-comportamental/publico/${convPropria.json?.tokenPub}`);
+verificar(
+  "convite do tenant A passa a usar o questionário próprio (64), não mais o da plataforma (48)",
+  consultaPropria.json?.totalPerguntas === 64,
+);
+
 const modelosA = await http("GET", "/gestao-pessoas/modelos", null, tokenA2);
 verificar(
   "tenant A enxerga o da plataforma + o próprio",
