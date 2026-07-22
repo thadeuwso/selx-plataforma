@@ -8,6 +8,9 @@ import { AnaliseIaCandidato } from "@/componentes/analise-ia-candidato";
 import { PerfilComportamentalVisao } from "@/componentes/perfil-comportamental-visao";
 import { ResumoCandidatura, type SituacaoCandidatura } from "@/componentes/resumo-candidatura";
 
+/** Etapas em que faz sentido avisar o candidato de que acabou. */
+const ENCERRADOS = ["not_selected", "rejected", "knockout", "archived"];
+
 const ROTULO_STATUS_ADMISSAO: Record<string, string> = {
   AGUARDANDO_CANDIDATO: "Aguardando candidato",
   AGUARDANDO_APROVACAO_DP: "Aguardando aprovação do DP",
@@ -164,6 +167,62 @@ export function CandidatoDrawer({
   const [salvandoNota, setSalvandoNota] = useState(false);
   const [mudandoEstagio, setMudandoEstagio] = useState(false);
   const [entrevistaAberta, setEntrevistaAberta] = useState(false);
+  const [propostaAberta, setPropostaAberta] = useState(false);
+  const [formProp, setFormProp] = useState({ vlrSalario: "", dtInicio: "", tipoContrato: "CLT", beneficios: "", observacoes: "" });
+  const [salvandoProp, setSalvandoProp] = useState(false);
+  const [erroProp, setErroProp] = useState<string | null>(null);
+  const [avisando, setAvisando] = useState(false);
+
+  async function enviarProposta(e: React.FormEvent) {
+    e.preventDefault();
+    if (!codCdt) return;
+    setErroProp(null);
+    if (!formProp.vlrSalario) {
+      setErroProp("Informe o salário oferecido.");
+      return;
+    }
+    setSalvandoProp(true);
+    const r = await api(`/candidaturas/${codCdt}/propostas`, {
+      metodo: "POST",
+      corpo: {
+        vlrSalario: Number(formProp.vlrSalario),
+        dtInicio: formProp.dtInicio || undefined,
+        tipoContrato: formProp.tipoContrato || undefined,
+        beneficios: formProp.beneficios || undefined,
+        observacoes: formProp.observacoes || undefined,
+      },
+    });
+    setSalvandoProp(false);
+    if (r.status !== 201) {
+      setErroProp("Não foi possível enviar. Já existe uma proposta aguardando resposta?");
+      return;
+    }
+    setPropostaAberta(false);
+    await carregarDetalhe();
+    aoAtualizar();
+  }
+
+  /**
+   * Aviso de encerramento — ação explícita, com confirmação.
+   *
+   * Nunca automática ao reprovar: reprovar é corriqueiro (inclusive em lote) e
+   * mandar recusa por acidente é irreversível.
+   */
+  async function avisarEncerramento() {
+    if (!codCdt || !detalhe) return;
+    const ok = confirm(
+      `Enviar a ${detalhe.candidato.nomeCand} um e-mail avisando que o processo terminou?\n\nIsto não pode ser desfeito.`,
+    );
+    if (!ok) return;
+    setAvisando(true);
+    const r = await api<{ jaAvisado: boolean }>(`/candidaturas/${codCdt}/avisar-encerramento`, { metodo: "POST" });
+    setAvisando(false);
+    if (r.status !== 201) {
+      alert("Não foi possível enviar o aviso.");
+      return;
+    }
+    alert(r.json?.jaAvisado ? "Este candidato já havia sido avisado." : "Aviso enviado.");
+  }
   const [formEntrev, setFormEntrev] = useState({ data: "", hora: "", duracaoMin: "45", tipo: "VIDEO", local: "", linkReuniao: "" });
   const [salvandoEntrev, setSalvandoEntrev] = useState(false);
   const [erroEntrev, setErroEntrev] = useState<string | null>(null);
@@ -388,6 +447,23 @@ export function CandidatoDrawer({
             ))}
             {/* Marcar entrevista abre o agendamento de verdade. Antes este
                 botão só mudava a etapa, prometendo algo que não fazia. */}
+            <button
+              onClick={() => setPropostaAberta(true)}
+              disabled={mudandoEstagio}
+              style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Enviar proposta
+            </button>
+            {ENCERRADOS.includes(detalhe.estagio) && (
+              <button
+                onClick={avisarEncerramento}
+                disabled={avisando}
+                title="Manda um e-mail avisando que o processo terminou"
+                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                {avisando ? "Enviando…" : "Avisar encerramento"}
+              </button>
+            )}
             <button
               onClick={() => setEntrevistaAberta(true)}
               disabled={mudandoEstagio}
@@ -647,6 +723,36 @@ export function CandidatoDrawer({
               Deixar o candidato escolher
             </button>
           </div>
+        </form>
+      </Gaveta>
+
+      <Gaveta titulo="Enviar proposta" aberta={propostaAberta} fechar={() => setPropostaAberta(false)} largura={520}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.55 }}>
+          O candidato recebe os termos por e-mail e responde por um link próprio — aceitando ou
+          recusando. Se recusar, pode contar o motivo, e ele fica registrado no histórico.
+        </p>
+        <form onSubmit={enviarProposta} style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Campo rotulo="Salário (R$/mês)">
+              <Entrada type="number" min={1} value={formProp.vlrSalario} onChange={(e) => setFormProp({ ...formProp, vlrSalario: e.target.value })} />
+            </Campo>
+            <Campo rotulo="Início previsto">
+              <Entrada type="date" value={formProp.dtInicio} onChange={(e) => setFormProp({ ...formProp, dtInicio: e.target.value })} />
+            </Campo>
+          </div>
+          <Campo rotulo="Tipo de contrato">
+            <Entrada value={formProp.tipoContrato} onChange={(e) => setFormProp({ ...formProp, tipoContrato: e.target.value })} />
+          </Campo>
+          <Campo rotulo="Benefícios">
+            <Entrada placeholder="VR, plano de saúde, …" value={formProp.beneficios} onChange={(e) => setFormProp({ ...formProp, beneficios: e.target.value })} />
+          </Campo>
+          <Campo rotulo="Observações">
+            <Entrada value={formProp.observacoes} onChange={(e) => setFormProp({ ...formProp, observacoes: e.target.value })} />
+          </Campo>
+          <Erro mensagem={erroProp} />
+          <BotaoPrimario type="submit" disabled={salvandoProp}>
+            {salvandoProp ? "Enviando…" : "Enviar proposta ao candidato"}
+          </BotaoPrimario>
         </form>
       </Gaveta>
     </Gaveta>

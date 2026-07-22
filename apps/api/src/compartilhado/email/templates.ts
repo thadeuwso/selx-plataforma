@@ -13,6 +13,10 @@ export interface DadosTemplate {
   nomeEmpresa: string;
   tituloVaga: string;
   url: string;
+  /** Só para a proposta. */
+  vlrSalario?: number;
+  dtInicio?: Date;
+  tipoContrato?: string;
   /** Só para a entrevista confirmada. */
   dhEntrevista?: Date;
   tipoEntrevista?: string;
@@ -209,6 +213,76 @@ export const TEMPLATES: Record<string, Montador> = {
         rodape,
       ].join('\n'),
       html: envelope('Entrevista confirmada', paragrafos, d.url, d.tipoEntrevista === 'VIDEO' ? 'Entrar na reunião' : 'Ver meu processo'),
+    };
+  },
+  /** Proposta enviada: o candidato lê os termos e responde pelo portal. */
+  'proposta-recebida': (d) => {
+    const valor = d.vlrSalario
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.vlrSalario)
+      : null;
+    const inicio = d.dtInicio
+      ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long' }).format(d.dtInicio)
+      : null;
+    const linhas = [
+      valor ? `<strong>Salário:</strong> ${valor}` : null,
+      inicio ? `<strong>Início previsto:</strong> ${inicio}` : null,
+      d.tipoContrato ? `<strong>Contrato:</strong> ${d.tipoContrato}` : null,
+    ].filter(Boolean);
+    const paragrafos = [
+      `Olá, ${d.nomeCandidato}.`,
+      `Temos uma proposta para você na vaga <strong>${d.tituloVaga}</strong>, na ${d.nomeEmpresa}.`,
+      linhas.join('<br>'),
+      'No link abaixo você vê os detalhes completos e responde — aceitando ou recusando. Se quiser conversar antes de decidir, é só responder esta mensagem.',
+    ];
+    return {
+      assunto: `Proposta para ${d.tituloVaga} — ${d.nomeEmpresa}`,
+      texto: [
+        `Olá, ${d.nomeCandidato}.`,
+        '',
+        `Temos uma proposta para você na vaga ${d.tituloVaga}, na ${d.nomeEmpresa}.`,
+        valor ? `Salário: ${valor}` : '',
+        inicio ? `Início previsto: ${inicio}` : '',
+        d.tipoContrato ? `Contrato: ${d.tipoContrato}` : '',
+        '',
+        'No link abaixo você vê os detalhes completos e responde — aceitando ou recusando.',
+        '',
+        d.url,
+        '',
+        'Se quiser conversar antes de decidir, é só responder esta mensagem.',
+        '',
+        rodape,
+      ].filter((l) => l !== '').join('\n'),
+      html: envelope('Você recebeu uma proposta', paragrafos, d.url, 'Ver e responder'),
+    };
+  },
+
+  /**
+   * Encerramento do processo.
+   *
+   * Texto curto, sem falsa esperança e sem justificativa genérica — quem não
+   * passou merece saber, e merece saber sem enrolação. Nunca é enviado
+   * automaticamente: ver `RN-REC-018` no vault.
+   */
+  'processo-encerrado': (d) => {
+    const paragrafos = [
+      `Olá, ${d.nomeCandidato}.`,
+      `Escrevemos sobre o processo para <strong>${d.tituloVaga}</strong>, na ${d.nomeEmpresa}.`,
+      'Desta vez não seguimos com a sua candidatura. Agradecemos de verdade o tempo que você dedicou — sabemos que participar de um processo dá trabalho.',
+      'Seu cadastro continua no nosso banco de talentos, e podemos procurar você quando surgir algo mais próximo do seu perfil.',
+    ];
+    return {
+      assunto: `Sobre sua candidatura — ${d.tituloVaga}`,
+      texto: [
+        `Olá, ${d.nomeCandidato}.`,
+        '',
+        `Escrevemos sobre o processo para ${d.tituloVaga}, na ${d.nomeEmpresa}.`,
+        'Desta vez não seguimos com a sua candidatura. Agradecemos de verdade o tempo que você dedicou — sabemos que participar de um processo dá trabalho.',
+        '',
+        'Seu cadastro continua no nosso banco de talentos, e podemos procurar você quando surgir algo mais próximo do seu perfil.',
+        '',
+        rodape,
+      ].join('\n'),
+      html: envelope('Sobre sua candidatura', paragrafos, d.url, 'Ver meu histórico'),
     };
   },
 };

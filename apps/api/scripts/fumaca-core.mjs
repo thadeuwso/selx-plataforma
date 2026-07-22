@@ -1089,6 +1089,90 @@ verificar(
   reconvite.json?.codConv === conviteComEmail.json?.codConv && reconvite.json?.emailEnfileirado === false,
 );
 
+// 24a. Proposta e fechamento do funil (RN-REC-018)
+const vagaProp = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Proposta" }, tokenA2);
+await http("PATCH", `/vagas/${vagaProp.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaProp.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtProp = await http("POST", `/vagas/${vagaProp.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Recebe Proposta", email: `prop.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+const cdtRecusa = await http("POST", `/vagas/${vagaProp.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Vai Recusar", email: `recusa.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+
+const prop1 = await http("POST", `/candidaturas/${cdtProp.json?.codCdt}/propostas`, {
+  vlrSalario: 9500, dtInicio: "2026-09-01", tipoContrato: "CLT", beneficios: "VR, plano de saúde",
+}, tokenA2);
+verificar("cria e envia a proposta (201)", prop1.status === 201 && prop1.json?.status === "ENVIADA" && !!prop1.json?.tokenPub);
+verificar(
+  "enviar proposta move a candidatura para a etapa Proposta",
+  (await http("GET", `/candidaturas/${cdtProp.json?.codCdt}`, null, tokenA2)).json?.estagio === "offer",
+);
+// Duas propostas abertas deixariam o candidato sem saber qual vale.
+verificar(
+  "segunda proposta com uma ainda aberta é recusada → 400",
+  (await http("POST", `/candidaturas/${cdtProp.json?.codCdt}/propostas`, { vlrSalario: 10000 }, tokenA2)).status === 400,
+);
+
+const propPub = await http("GET", `/proposta/publico/${prop1.json?.tokenPub}`);
+verificar(
+  "candidato lê a proposta sem login",
+  propPub.status === 200 && Number(propPub.json?.vlrSalario) === 9500 && propPub.json?.candidatura?.vaga?.titulo === "Vaga Proposta",
+);
+verificar(
+  "a proposta pública não expõe o motivo de recusa (anotação do processo)",
+  !("motivoRecusa" in (propPub.json ?? {})),
+);
+
+const aceite = await http("POST", `/proposta/publico/${prop1.json?.tokenPub}/responder`, { resposta: "ACEITA" });
+verificar("candidato aceita a proposta", aceite.status === 201 && aceite.json?.status === "ACEITA");
+// Aceitar leva a "aprovado", não a "contratado": a admissão é decisão do DP.
+verificar(
+  "aceite move para aprovado, não direto para contratado",
+  (await http("GET", `/candidaturas/${cdtProp.json?.codCdt}`, null, tokenA2)).json?.estagio === "approved",
+);
+verificar(
+  "responder de novo é recusado → 400",
+  (await http("POST", `/proposta/publico/${prop1.json?.tokenPub}/responder`, { resposta: "RECUSADA" })).status === 400,
+);
+
+const prop2 = await http("POST", `/candidaturas/${cdtRecusa.json?.codCdt}/propostas`, { vlrSalario: 4000 }, tokenA2);
+const recusa = await http("POST", `/proposta/publico/${prop2.json?.tokenPub}/responder`, {
+  resposta: "RECUSADA", motivo: "Recebi outra oferta com salário maior",
+});
+verificar("candidato recusa e informa o motivo", recusa.json?.status === "RECUSADA");
+const histRecusa = await http("GET", `/candidaturas/${cdtRecusa.json?.codCdt}/timeline`, null, tokenA2);
+verificar(
+  "o motivo da recusa fica registrado na timeline, para o recrutador",
+  histRecusa.json?.some((e) => e.notaInterna?.includes("outra oferta")),
+);
+
+// Aviso de encerramento: explícito, nunca automático.
+verificar(
+  "avisar encerramento de candidatura em andamento é recusado → 400",
+  (await http("POST", `/candidaturas/${cdtProp.json?.codCdt}/avisar-encerramento`, {}, tokenA2)).status === 400,
+);
+const aviso1 = await http("POST", `/candidaturas/${cdtRecusa.json?.codCdt}/avisar-encerramento`, {}, tokenA2);
+verificar("avisa o candidato encerrado (enfileira)", aviso1.json?.enfileirado === true);
+verificar(
+  "avisar duas vezes não manda segundo e-mail",
+  (await http("POST", `/candidaturas/${cdtRecusa.json?.codCdt}/avisar-encerramento`, {}, tokenA2)).json?.jaAvisado === true,
+);
+
+// Fechamento da vaga com o contratado — campo que existia e ninguém usava.
+const candProp = (await http("GET", `/candidaturas/${cdtProp.json?.codCdt}`, null, tokenA2)).json?.candidato?.codCand;
+verificar(
+  "fechar com candidato de outra vaga é recusado → 400",
+  (await http("PATCH", `/vagas/${vagaProp.json?.codVag}/status`, { acao: "fechar", codCandContratado: cand1.json?.codCand }, tokenA2)).status === 400,
+);
+const fechou = await http("PATCH", `/vagas/${vagaProp.json?.codVag}/status`, {
+  acao: "fechar", codCandContratado: candProp,
+}, tokenA2);
+verificar(
+  "fecha a vaga registrando quem foi contratado",
+  fechou.status === 200 && String(fechou.json?.codCandContratado) === String(candProp),
+);
+
 // 24b. Triagem em volume: etiquetas, favoritos e filtros salvos (RN-REC-017)
 // Segundo recrutador no mesmo tenant — favorito e filtro salvo são POR USUÁRIO,
 // e sem um colega não há como provar isso.

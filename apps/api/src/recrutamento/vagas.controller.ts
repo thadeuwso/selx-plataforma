@@ -384,7 +384,12 @@ export class VagasController {
   @Patch(':codVag/status')
   transicionar(@Req() req: ReqAut, @Param('codVag') codVag: string, @Body() corpo: unknown) {
     const dados = validar(
-      z.object({ acao: z.enum(['enviar_aprovacao', 'aprovar', 'pedir_ajustes', 'rejeitar', 'fechar', 'cancelar']), observacao: z.string().optional() }),
+      z.object({
+        acao: z.enum(['enviar_aprovacao', 'aprovar', 'pedir_ajustes', 'rejeitar', 'fechar', 'cancelar']),
+        observacao: z.string().optional(),
+        /** Quem foi contratado, ao fechar (RN-REC-018). */
+        codCandContratado: z.coerce.bigint().optional(),
+      }),
       corpo,
     );
     const transicao = TRANSICOES[dados.acao];
@@ -403,6 +408,18 @@ export class VagasController {
       if (dados.acao === 'aprovar' && vaga.codUsuAlt === req.usuario.codUsu && vaga.codUsuInc === req.usuario.codUsu) {
         // permitido em tenants pequenos; registrado na observação para auditoria
       }
+      // Fechar com contratado exige que a pessoa realmente tenha candidatura
+      // nesta vaga — registrar alguém de outra vaga corromperia a métrica.
+      let contratado: { codCand: bigint } | null = null;
+      if (dados.acao === 'fechar' && dados.codCandContratado) {
+        const cdt = await tx.candidatura.findFirst({
+          where: { codVag: vaga.codVag, codCand: dados.codCandContratado, ativo: 'S' },
+          select: { codCand: true },
+        });
+        if (!cdt) throw new BadRequestException('Este candidato não tem candidatura nesta vaga');
+        contratado = cdt;
+      }
+
       const agora = new Date();
       return tx.vaga.update({
         where: { codVag: vaga.codVag },
@@ -416,8 +433,12 @@ export class VagasController {
             ? { obsAprov: dados.observacao }
             : {}),
           ...(dados.acao === 'cancelar' ? { motivoCancel: dados.observacao } : {}),
+          // O campo existia desde a primeira migration e ninguém escrevia nele:
+          // a vaga fechava sem registrar quem entrou, e sem isso não há como
+          // medir tempo até contratar nem fechar o ciclo (RN-REC-018).
+          ...(dados.acao === 'fechar' && contratado ? { codCandContratado: contratado.codCand } : {}),
         },
-        select: { codVag: true, status: true },
+        select: { codVag: true, status: true, codCandContratado: true },
       });
     });
   }

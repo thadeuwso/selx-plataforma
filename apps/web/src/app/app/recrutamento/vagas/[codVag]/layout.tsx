@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { BotaoPrimario } from "@/componentes/formulario";
+import { BotaoPrimario, Gaveta } from "@/componentes/formulario";
 import { GavetaNovaCandidatura } from "@/componentes/gaveta-nova-candidatura";
 import { VagaContexto } from "@/componentes/recrutamento-compartilhado";
 
@@ -51,6 +51,8 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
   const [vaga, setVaga] = useState<VagaHub | null>(null);
   const [usuarios, setUsuarios] = useState<{ codUsu: string; nomeUsu: string }[]>([]);
   const [novaAberta, setNovaAberta] = useState(false);
+  const [encerrarAberto, setEncerrarAberto] = useState(false);
+  const [candidatosFinais, setCandidatosFinais] = useState<{ codCdt: string; candidato: { codCand: string; nomeCand: string } }[]>([]);
   const [recarregarToken, setRecarregarToken] = useState(0);
   const pedirRecarga = useCallback(() => setRecarregarToken((t) => t + 1), []);
 
@@ -70,9 +72,29 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
     await carregarVaga();
   }
 
-  async function transicionar(acao: string) {
-    const r = await api(`/vagas/${codVag}/status`, { metodo: "PATCH", corpo: { acao } });
-    if (r.status !== 200) { alert("Não foi possível executar a ação (verifique sua permissão)."); return; }
+  /**
+   * Encerrar pergunta quem foi contratado. O campo existia no schema desde a
+   * primeira migration e nunca era preenchido — sem ele não há como medir tempo
+   * até contratar nem fechar o ciclo da vaga (RN-REC-018).
+   */
+  async function abrirEncerramento() {
+    const r = await api<{ itens: { codCdt: string; candidato: { codCand: string; nomeCand: string } }[] }>(
+      `/vagas/${codVag}/candidaturas?estagio=approved,hired&tamanhoPagina=50`,
+    );
+    setCandidatosFinais(r.status === 200 && r.json ? r.json.itens : []);
+    setEncerrarAberto(true);
+  }
+
+  async function encerrar(codCandContratado?: string) {
+    const r = await api(`/vagas/${codVag}/status`, {
+      metodo: "PATCH",
+      corpo: { acao: "fechar", ...(codCandContratado ? { codCandContratado } : {}) },
+    });
+    if (r.status !== 200) {
+      alert("Não foi possível encerrar a vaga (verifique sua permissão).");
+      return;
+    }
+    setEncerrarAberto(false);
     await carregarVaga();
   }
 
@@ -122,7 +144,7 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href={`${base}/configuracoes`} style={estiloBotaoSec}>Editar vaga</Link>
             <button onClick={compartilhar} style={estiloBotaoSec}>Compartilhar</button>
-            {vaga.status === "ABERTA" && <button onClick={() => transicionar("fechar")} style={estiloBotaoSec}>Encerrar</button>}
+            {vaga.status === "ABERTA" && <button onClick={abrirEncerramento} style={estiloBotaoSec}>Encerrar</button>}
             <BotaoPrimario onClick={() => setNovaAberta(true)}>Adicionar candidato</BotaoPrimario>
           </div>
         </div>
@@ -167,6 +189,37 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
         requisitos={vaga.requisitos}
         aoRegistrar={() => { pedirRecarga(); rotear.push(base); }}
       />
+
+      <Gaveta titulo="Encerrar vaga" aberta={encerrarAberto} fechar={() => setEncerrarAberto(false)}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.55 }}>
+          Quem foi contratado? Registrar fecha o ciclo da vaga e é o que permite medir tempo até
+          contratar. Se a vaga não gerou contratação, encerre sem escolher ninguém.
+        </p>
+        {candidatosFinais.length > 0 ? (
+          <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
+            {candidatosFinais.map((c) => (
+              <button
+                key={c.codCdt}
+                onClick={() => encerrar(c.candidato.codCand)}
+                style={{
+                  textAlign: "left", padding: "10px 14px", borderRadius: 8,
+                  border: "1px solid var(--border-default)", background: "var(--surface-default)",
+                  fontFamily: "inherit", fontSize: 14, cursor: "pointer",
+                }}
+              >
+                {c.candidato.nomeCand}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 18px" }}>
+            Nenhum candidato aprovado ou contratado nesta vaga.
+          </p>
+        )}
+        <button onClick={() => encerrar()} style={estiloBotaoSec}>
+          Encerrar sem contratação
+        </button>
+      </Gaveta>
     </VagaContexto.Provider>
   );
 }

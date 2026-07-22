@@ -65,6 +65,7 @@ model Tenant {
   candidatoTags  CandidatoTag[]
   favoritas      CandidaturaFavorita[]
   filtrosSalvos  FiltroSalvo[]
+  propostas      Proposta[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -718,6 +719,7 @@ model Candidatura {
   iaAnalises IAAnaliseCandidatura[]
   entrevistas Entrevista[]
   favoritas  CandidaturaFavorita[]
+  propostas  Proposta[]
   processoAdmissao ProcessoAdmissao?
   convitesComportamentais ConviteComportamental[]
 
@@ -831,6 +833,45 @@ model RespostaCultural {
   @@unique([codCand, codCulPer])
   @@index([codTen, codCand])
   @@map("TRECULRESP")
+}
+
+/// Proposta ao candidato (RN-REC-018).
+///
+/// A etapa "Proposta" existia no pipeline e não fazia nada: o recrutador
+/// arrastava o card e o sistema parava de ajudar exatamente onde a contratação
+/// acontece. Aqui a proposta tem valor, data de início, envio e **resposta do
+/// candidato** — que responde pelo portal, com token próprio.
+///
+/// Várias por candidatura de propósito: renegociar é normal, e sobrescrever a
+/// anterior apagaria o histórico da negociação.
+model Proposta {
+  codProp       BigInt    @id @default(autoincrement()) @map("CODPROP")
+  codTen        BigInt    @map("CODTEN")
+  codCdt        BigInt    @map("CODCDT")
+  vlrSalario    Decimal   @map("VLRSALARIO") @db.Decimal(15, 2)
+  dtInicio      DateTime? @map("DTINICIO") @db.Date
+  tipoContrato  String?   @map("TIPOCONTRATO")
+  beneficios    String?   @map("BENEFICIOS") @db.Text
+  observacoes   String?   @map("OBSERVACOES") @db.Text
+  /// RASCUNHO | ENVIADA | ACEITA | RECUSADA | CANCELADA
+  status        String    @default("RASCUNHO") @map("STATUS")
+  /// Token opaco (ADR-0004 §5) — o candidato responde sem login.
+  tokenPub      String?   @unique @map("TOKENPUB")
+  dhEnvio       DateTime? @map("DHENVIO")
+  dhResposta    DateTime? @map("DHRESPOSTA")
+  /// O que o candidato escreveu ao recusar. Vale mais que o número: é o que
+  /// diz se a próxima proposta deve mudar de valor, de data ou de vaga.
+  motivoRecusa  String?   @map("MOTIVORECUSA") @db.Text
+  dhInc         DateTime  @default(now()) @map("DHINC")
+  codUsuInc     BigInt?   @map("CODUSUINC")
+  dhAlt         DateTime  @updatedAt @map("DHALT")
+  codUsuAlt     BigInt?   @map("CODUSUALT")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
+
+  @@index([codTen, codCdt])
+  @@map("TREPROP")
 }
 
 /// Etiqueta do banco de talentos (RN-REC-017).
