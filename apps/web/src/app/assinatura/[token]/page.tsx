@@ -139,7 +139,7 @@ export default function AssinaturaPublica() {
                 background: "var(--action-primary, var(--brand-700))",
                 color: "#fff",
                 fontWeight: 600,
-                font: "inherit",
+                fontFamily: "inherit",
                 fontSize: 14,
                 cursor: aceito && !assinando ? "pointer" : "not-allowed",
                 opacity: aceito && !assinando ? 1 : 0.5,

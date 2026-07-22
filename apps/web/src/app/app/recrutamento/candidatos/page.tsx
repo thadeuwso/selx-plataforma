@@ -98,7 +98,7 @@ function BotaoPaginacao({
         borderRadius: 6,
         background: "var(--surface-default)",
         color: desabilitado ? "var(--text-muted)" : "var(--text-body)",
-        font: "inherit",
+        fontFamily: "inherit",
         fontSize: 13,
         cursor: desabilitado ? "default" : "pointer",
         opacity: desabilitado ? 0.5 : 1,
@@ -118,7 +118,7 @@ function Aba({ ativa, aoClicar, children }: { ativa: boolean; aoClicar: () => vo
         border: "none",
         borderBottom: ativa ? "2px solid var(--action-primary, var(--brand-700))" : "2px solid transparent",
         background: "none",
-        font: "inherit",
+        fontFamily: "inherit", fontSize: "inherit",
         fontWeight: ativa ? 600 : 400,
         color: ativa ? "var(--text-body)" : "var(--text-muted)",
         cursor: "pointer",
@@ -546,7 +546,7 @@ export default function PaginaCandidatos() {
               required
               accept=".pdf,.docx,.txt"
               onChange={(e) => setArquivosLote(e.target.files)}
-              style={{ font: "inherit", fontSize: 14 }}
+              style={{ fontFamily: "inherit", fontSize: 14 }}
             />
           </Campo>
           <Erro mensagem={erro} />

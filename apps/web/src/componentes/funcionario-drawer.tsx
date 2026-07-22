@@ -266,7 +266,7 @@ export function FuncionarioDrawer({
                             navigator.clipboard.writeText(url).catch(() => {});
                             alert(`Link copiado:\n${url}`);
                           }}
-                          style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 12, whiteSpace: "nowrap" }}
+                          style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 12, whiteSpace: "nowrap" }}
                         >
                           Copiar link
                         </button>

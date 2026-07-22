@@ -137,7 +137,7 @@ function ColunaKanban({
         {temMais && (
           <button
             onClick={() => carregarMais(col.chave)}
-            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", font: "inherit" }}
+            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
           >
             Mostrar mais ({estado.total - estado.itens.length})
           </button>

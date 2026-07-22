@@ -158,7 +158,7 @@ export default function PaginaDashboard() {
                   navigator.clipboard.writeText(url).catch(() => {});
                   alert(`Link de assinatura copiado:\n${url}`);
                 }}
-                style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13, whiteSpace: "nowrap" }}
+                style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13, whiteSpace: "nowrap" }}
               >
                 Copiar link
               </button>

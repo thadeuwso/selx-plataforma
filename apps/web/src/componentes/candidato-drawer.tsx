@@ -391,7 +391,7 @@ export function CandidatoDrawer({
               <button
                 onClick={copiarLinkAcompanhamento}
                 title="Link onde o candidato acompanha o processo e vê o que está pendente"
-                style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 12, padding: 0 }}
+                style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 12, padding: 0 }}
               >
                 copiar link de acompanhamento
               </button>
@@ -409,7 +409,7 @@ export function CandidatoDrawer({
                 key={a.estagio}
                 onClick={() => mudarEstagio(a.estagio)}
                 disabled={mudandoEstagio}
-                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", font: "inherit" }}
+                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
               >
                 {a.rotulo}
               </button>
@@ -555,7 +555,7 @@ export function CandidatoDrawer({
                       disabled={iniciandoAdmissao}
                       style={{
                         padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-default)",
-                        background: "var(--surface-default)", fontSize: 13, cursor: "pointer", font: "inherit",
+                        background: "var(--surface-default)", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
                       }}
                     >
                       {iniciandoAdmissao ? "Iniciando..." : "Iniciar Admissão"}
@@ -593,7 +593,7 @@ export function CandidatoDrawer({
                         </span>
                         <button
                           onClick={() => baixarArquivo(detalhe.candidato.codCand, cv.codCandCv)}
-                          style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 12 }}
+                          style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
                         >
                           Abrir arquivo original
                         </button>
@@ -627,7 +627,7 @@ export function CandidatoDrawer({
                   disabled={convidando}
                   style={{
                     padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border-default)",
-                    background: "var(--surface-default)", fontSize: 13, cursor: "pointer", font: "inherit", width: "fit-content",
+                    background: "var(--surface-default)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", width: "fit-content",
                   }}
                 >
                   {convidando ? "Gerando link..." : "Convidar avaliação comportamental"}
@@ -742,7 +742,7 @@ export function CandidatoDrawer({
                                   <button
                                     onClick={gerarResumoIa}
                                     disabled={gerandoResumo}
-                                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", font: "inherit" }}
+                                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
                                   >
                                     {gerandoResumo ? "Gerando..." : "Gerar resumo"}
                                   </button>
@@ -778,7 +778,7 @@ export function CandidatoDrawer({
                                   <button
                                     onClick={gerarPerguntasIa}
                                     disabled={gerandoPerguntas}
-                                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", font: "inherit" }}
+                                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
                                   >
                                     {gerandoPerguntas ? "Gerando..." : "Sugerir perguntas"}
                                   </button>
@@ -841,12 +841,12 @@ export function CandidatoDrawer({
                   onChange={(e) => setNovaNota(e.target.value)}
                   rows={3}
                   placeholder="Anotação interna sobre o candidato…"
-                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-default)", font: "inherit", fontSize: 13, resize: "vertical" }}
+                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-default)", fontFamily: "inherit", fontSize: 13, resize: "vertical" }}
                 />
                 <button
                   onClick={adicionarNota}
                   disabled={salvandoNota || !novaNota.trim()}
-                  style={{ justifySelf: "start", padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 13, cursor: "pointer", font: "inherit", opacity: !novaNota.trim() ? 0.6 : 1 }}
+                  style={{ justifySelf: "start", padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", opacity: !novaNota.trim() ? 0.6 : 1 }}
                 >
                   {salvandoNota ? "Salvando..." : "Adicionar anotação"}
                 </button>

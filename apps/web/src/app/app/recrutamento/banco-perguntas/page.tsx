@@ -154,7 +154,7 @@ export default function PaginaBancoPerguntas() {
               {selecionadas.size > 0 && (
                 <button
                   onClick={() => setSelecionadas(new Set())}
-                  style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13 }}
+                  style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}
                 >
                   Limpar
                 </button>
@@ -185,7 +185,7 @@ export default function PaginaBancoPerguntas() {
                     </div>
                     <button
                       onClick={() => alternarFator(f)}
-                      style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13 }}
+                      style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}
                     >
                       {f.perguntas.every((p) => selecionadas.has(p.codPer)) ? "Desmarcar todas" : "Marcar todas"}
                     </button>

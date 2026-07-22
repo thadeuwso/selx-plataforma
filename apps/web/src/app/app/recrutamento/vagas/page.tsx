@@ -329,7 +329,7 @@ export default function PaginaVagas() {
                         <button
                           key={a.acao}
                           onClick={() => transicionar(v.codVag, a.acao)}
-                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", font: "inherit", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
+                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", fontFamily: "inherit", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
                         >
                           {a.rotulo}
                         </button>
@@ -379,7 +379,7 @@ export default function PaginaVagas() {
               borderRadius: 8,
               background: "var(--surface-default)",
               color: "var(--text-body)",
-              font: "inherit",
+              fontFamily: "inherit",
               fontSize: 13,
               resize: "vertical",
             }}
@@ -395,7 +395,7 @@ export default function PaginaVagas() {
               border: "1px solid var(--border-default)",
               background: "var(--surface-default)",
               color: "var(--text-body)",
-              font: "inherit",
+              fontFamily: "inherit",
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",

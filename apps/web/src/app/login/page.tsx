@@ -70,7 +70,7 @@ export default function PaginaLogin() {
               borderRadius: 8,
               background: "var(--surface-default)",
               color: "var(--text-body)",
-              font: "inherit",
+              fontFamily: "inherit", fontSize: "inherit",
             }}
           />
         </label>
@@ -87,7 +87,7 @@ export default function PaginaLogin() {
               borderRadius: 8,
               background: "var(--surface-default)",
               color: "var(--text-body)",
-              font: "inherit",
+              fontFamily: "inherit", fontSize: "inherit",
             }}
           />
         </label>
@@ -104,7 +104,7 @@ export default function PaginaLogin() {
             background: "var(--action-primary, var(--brand-700))",
             color: "#fff",
             fontWeight: 600,
-            font: "inherit",
+            fontFamily: "inherit", fontSize: "inherit",
             cursor: "pointer",
             opacity: carregando ? 0.7 : 1,
           }}

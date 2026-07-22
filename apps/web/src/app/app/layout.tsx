@@ -143,7 +143,7 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
             border: "1px solid rgba(255,255,255,.25)",
             background: "transparent",
             color: "#fff",
-            font: "inherit",
+            fontFamily: "inherit", fontSize: "inherit",
             cursor: "pointer",
           }}
         >
@@ -157,7 +157,7 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
             border: "1px solid rgba(255,255,255,.25)",
             background: "transparent",
             color: "#fff",
-            font: "inherit",
+            fontFamily: "inherit", fontSize: "inherit",
             cursor: "pointer",
           }}
         >

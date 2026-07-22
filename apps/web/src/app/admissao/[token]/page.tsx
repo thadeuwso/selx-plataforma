@@ -100,7 +100,7 @@ const estiloEntrada: React.CSSProperties = {
   borderRadius: 8,
   background: "var(--surface-default)",
   color: "var(--text-body)",
-  font: "inherit",
+  fontFamily: "inherit",
   fontSize: 14,
   width: "100%",
 };
@@ -295,7 +295,7 @@ export default function AdmissaoPublica() {
               disabled={salvando}
               style={{
                 padding: "10px 16px", borderRadius: 8, border: "1px solid var(--border-default)",
-                background: "var(--surface-default)", color: "var(--text-body)", font: "inherit",
+                background: "var(--surface-default)", color: "var(--text-body)", fontFamily: "inherit",
                 fontSize: 14, cursor: "pointer",
               }}
             >
@@ -307,7 +307,7 @@ export default function AdmissaoPublica() {
               style={{
                 padding: "10px 16px", borderRadius: 8, border: "none",
                 background: "var(--action-primary, var(--brand-700))", color: "#fff",
-                fontWeight: 600, font: "inherit", fontSize: 14, cursor: "pointer",
+                fontWeight: 600, fontFamily: "inherit", fontSize: 14, cursor: "pointer",
                 opacity: enviando ? 0.7 : 1,
               }}
             >

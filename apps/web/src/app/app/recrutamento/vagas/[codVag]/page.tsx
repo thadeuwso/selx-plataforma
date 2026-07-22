@@ -102,7 +102,7 @@ export default function AbaCandidatos() {
               key={m}
               onClick={() => setModo(m)}
               style={{
-                padding: "8px 16px", border: "none", cursor: "pointer", font: "inherit", fontSize: 13,
+                padding: "8px 16px", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13,
                 background: modo === m ? "var(--brand-700)" : "var(--surface-default)",
                 color: modo === m ? "#fff" : "var(--text-body)", fontWeight: modo === m ? 600 : 400,
               }}
@@ -112,7 +112,7 @@ export default function AbaCandidatos() {
           ))}
           <button
             onClick={abrirComparacao}
-            style={{ padding: "8px 16px", border: "none", borderLeft: "1px solid var(--border-default)", cursor: "pointer", font: "inherit", fontSize: 13, background: "var(--surface-default)", color: "var(--text-body)" }}
+            style={{ padding: "8px 16px", border: "none", borderLeft: "1px solid var(--border-default)", cursor: "pointer", fontFamily: "inherit", fontSize: 13, background: "var(--surface-default)", color: "var(--text-body)" }}
           >
             Comparação
           </button>
@@ -156,7 +156,7 @@ export default function AbaCandidatos() {
           <button onClick={solicitarAvaliacaoLote} disabled={processandoLote} style={estiloAcaoLote}>Solicitar avaliação</button>
           <button onClick={exportarCsv} style={estiloAcaoLote}>Exportar CSV</button>
           <BotaoPrimario onClick={abrirComparacao} disabled={selecionados.length < 2} style={{ padding: "6px 12px", fontSize: 13 }}>Comparar</BotaoPrimario>
-          <button onClick={() => setSelecionados([])} style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13 }}>Limpar</button>
+          <button onClick={() => setSelecionados([])} style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Limpar</button>
         </div>
       )}
 
@@ -168,5 +168,5 @@ export default function AbaCandidatos() {
 
 const estiloAcaoLote: React.CSSProperties = {
   padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)",
-  color: "var(--text-body)", fontSize: 13, cursor: "pointer", font: "inherit",
+  color: "var(--text-body)", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
 };

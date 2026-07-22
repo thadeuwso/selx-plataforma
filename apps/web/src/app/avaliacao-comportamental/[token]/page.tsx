@@ -158,7 +158,7 @@ export default function AvaliacaoComportamentalPublica() {
               background: "var(--action-primary, var(--brand-700))",
               color: "#fff",
               fontWeight: 600,
-              font: "inherit",
+              fontFamily: "inherit", fontSize: "inherit",
               cursor: "pointer",
               opacity: aceitando ? 0.7 : 1,
             }}
@@ -202,7 +202,7 @@ export default function AvaliacaoComportamentalPublica() {
                 background: pergunta.respondida === o.valor ? "var(--brand-50, #F2E9E2)" : "var(--surface-default)",
                 textAlign: "left",
                 fontSize: 14,
-                font: "inherit",
+                fontFamily: "inherit",
                 cursor: "pointer",
                 opacity: enviando ? 0.7 : 1,
               }}
@@ -215,7 +215,7 @@ export default function AvaliacaoComportamentalPublica() {
           <button
             onClick={() => setIndice(Math.max(0, indice - 1))}
             disabled={indice === 0}
-            style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", opacity: indice === 0 ? 0.4 : 1 }}
+            style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", opacity: indice === 0 ? 0.4 : 1 }}
           >
             ← Voltar
           </button>
@@ -223,7 +223,7 @@ export default function AvaliacaoComportamentalPublica() {
             <button
               onClick={() => setIndice(indice + 1)}
               disabled={pergunta.respondida == null}
-              style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", opacity: pergunta.respondida == null ? 0.4 : 1 }}
+              style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", opacity: pergunta.respondida == null ? 0.4 : 1 }}
             >
               Próxima →
             </button>
@@ -238,7 +238,7 @@ export default function AvaliacaoComportamentalPublica() {
                 background: "var(--action-primary, var(--brand-700))",
                 color: "#fff",
                 fontWeight: 600,
-                font: "inherit",
+                fontFamily: "inherit", fontSize: "inherit",
                 cursor: "pointer",
                 opacity: !todasRespondidas || enviando ? 0.6 : 1,
               }}

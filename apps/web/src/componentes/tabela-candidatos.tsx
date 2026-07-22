@@ -106,7 +106,7 @@ export function TabelaCandidatos({
             placeholder="Buscar por nome ou e-mail…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            style={{ padding: "8px 12px", border: "1px solid var(--border-default)", borderRadius: 8, background: "var(--surface-default)", color: "var(--text-body)", font: "inherit", fontSize: 13, width: 240 }}
+            style={{ padding: "8px 12px", border: "1px solid var(--border-default)", borderRadius: 8, background: "var(--surface-default)", color: "var(--text-body)", fontFamily: "inherit", fontSize: 13, width: 240 }}
           />
         </form>
         <select value={ordenar} onChange={(e) => setOrdenar(e.target.value)} style={estiloSelect}>
@@ -165,7 +165,7 @@ export function TabelaCandidatos({
               ))}
             {!carregando && erro && (
               <tr><td style={{ ...cel, textAlign: "center", color: "var(--red-600, #9A3833)", padding: 24 }} colSpan={12}>
-                Não foi possível carregar os candidatos. <button onClick={() => carregar()} style={{ color: "var(--text-link)", background: "none", border: "none", cursor: "pointer", font: "inherit" }}>Tentar de novo</button>
+                Não foi possível carregar os candidatos. <button onClick={() => carregar()} style={{ color: "var(--text-link)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}>Tentar de novo</button>
               </td></tr>
             )}
             {!carregando && !erro && itens.length === 0 && (
@@ -222,11 +222,11 @@ export function TabelaCandidatos({
 }
 
 const estiloSelect: React.CSSProperties = {
-  padding: "8px 12px", border: "1px solid var(--border-default)", borderRadius: 8, background: "var(--surface-default)", color: "var(--text-body)", font: "inherit", fontSize: 13,
+  padding: "8px 12px", border: "1px solid var(--border-default)", borderRadius: 8, background: "var(--surface-default)", color: "var(--text-body)", fontFamily: "inherit", fontSize: 13,
 };
 function estiloPaginacao(desabilitado: boolean): React.CSSProperties {
   return {
     padding: "6px 12px", border: "1px solid var(--border-default)", borderRadius: 8, background: "var(--surface-default)",
-    color: desabilitado ? "var(--text-muted)" : "var(--text-body)", font: "inherit", fontSize: 13, cursor: desabilitado ? "not-allowed" : "pointer", opacity: desabilitado ? 0.5 : 1,
+    color: desabilitado ? "var(--text-muted)" : "var(--text-body)", fontFamily: "inherit", fontSize: 13, cursor: desabilitado ? "not-allowed" : "pointer", opacity: desabilitado ? 0.5 : 1,
   };
 }

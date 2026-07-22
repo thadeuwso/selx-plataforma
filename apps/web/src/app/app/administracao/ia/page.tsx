@@ -76,7 +76,7 @@ export default function PaginaConfiguracoesIa() {
                   borderRadius: 10,
                   border: `1px solid ${ativa ? "var(--action-primary, var(--brand-700))" : "var(--border-default)"}`,
                   background: "var(--surface-default)",
-                  font: "inherit",
+                  fontFamily: "inherit", fontSize: "inherit",
                   cursor: ativa || salvando ? "default" : "pointer",
                   display: "grid",
                   gap: 6,

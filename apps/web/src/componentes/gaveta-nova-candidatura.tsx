@@ -149,7 +149,7 @@ export function GavetaNovaCandidatura({
                     </div>
                     <Campo rotulo="Evidência">
                       <textarea value={valor.evidenciaTexto} onChange={(e) => atualizar({ evidenciaTexto: e.target.value })} rows={2}
-                        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-default)", font: "inherit", resize: "vertical" }} />
+                        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-default)", fontFamily: "inherit", fontSize: "inherit", resize: "vertical" }} />
                     </Campo>
                   </div>
                 );

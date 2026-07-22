@@ -152,7 +152,7 @@ export function AnaliseIaCandidato({ codCdt }: { codCdt: string }) {
           <button
             onClick={gerar}
             disabled={gerando}
-            style={{ font: "inherit", fontSize: 12, fontWeight: 600, background: "none", border: "none", cursor: "pointer", color: "inherit", textDecoration: "underline" }}
+            style={{ fontFamily: "inherit", fontSize: 12, fontWeight: 600, background: "none", border: "none", cursor: "pointer", color: "inherit", textDecoration: "underline" }}
           >
             {gerando ? "Analisando…" : "Refazer"}
           </button>

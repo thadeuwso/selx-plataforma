@@ -137,7 +137,7 @@ export default function PaginaAdmissaoDetalhe() {
                 border: "1px solid var(--border-default)",
                 background: "var(--surface-default)",
                 cursor: "pointer",
-                font: "inherit",
+                fontFamily: "inherit", fontSize: "inherit",
               }}
             >
               Solicitar ajustes
@@ -164,7 +164,7 @@ export default function PaginaAdmissaoDetalhe() {
             navigator.clipboard.writeText(url).catch(() => {});
             alert(`Link copiado:\n${url}`);
           }}
-          style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13 }}
+          style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}
         >
           Copiar
         </button>
@@ -241,7 +241,7 @@ export default function PaginaAdmissaoDetalhe() {
                 padding: "8px 12px",
                 borderRadius: 8,
                 border: "1px solid var(--border-default)",
-                font: "inherit",
+                fontFamily: "inherit", fontSize: "inherit",
                 resize: "vertical",
               }}
             />

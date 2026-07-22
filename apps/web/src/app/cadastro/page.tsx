@@ -81,7 +81,7 @@ export default function PaginaCadastro() {
     borderRadius: 8,
     background: "var(--surface-default)",
     color: "var(--text-body)",
-    font: "inherit",
+    fontFamily: "inherit", fontSize: "inherit",
     width: "100%",
   };
   const rotulo: React.CSSProperties = { display: "grid", gap: 6, fontSize: 13, color: "var(--text-body)" };
@@ -169,7 +169,7 @@ export default function PaginaCadastro() {
             background: "var(--action-primary, var(--brand-700))",
             color: "#fff",
             fontWeight: 600,
-            font: "inherit",
+            fontFamily: "inherit", fontSize: "inherit",
             cursor: "pointer",
             opacity: carregando ? 0.7 : 1,
             marginTop: 4,

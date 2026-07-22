@@ -111,7 +111,7 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
                 <select
                   value={vaga.responsavel?.codUsu ?? ""}
                   onChange={(e) => atribuirResponsavel(e.target.value || null)}
-                  style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", font: "inherit", fontSize: 12 }}
+                  style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", fontFamily: "inherit", fontSize: 12 }}
                 >
                   <option value="">— sem responsável —</option>
                   {usuarios.map((u) => <option key={u.codUsu} value={u.codUsu}>{u.nomeUsu}</option>)}
@@ -173,5 +173,5 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
 
 const estiloBotaoSec: React.CSSProperties = {
   padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-default)",
-  color: "var(--text-body)", fontSize: 14, textDecoration: "none", cursor: "pointer", font: "inherit", display: "inline-flex", alignItems: "center",
+  color: "var(--text-body)", fontSize: 14, textDecoration: "none", cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center",
 };
