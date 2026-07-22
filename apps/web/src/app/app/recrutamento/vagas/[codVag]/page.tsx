@@ -1,8 +1,8 @@
 "use client";
 import { useParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { BotaoPrimario } from "@/componentes/formulario";
+import { BotaoPrimario, Campo, Entrada, Gaveta } from "@/componentes/formulario";
 import { CandidatoDrawer } from "@/componentes/candidato-drawer";
 import { TabelaCandidatos } from "@/componentes/tabela-candidatos";
 import { PipelineKanban } from "@/componentes/pipeline-kanban";
@@ -24,6 +24,18 @@ export default function AbaCandidatos() {
   const [carregadas, setCarregadas] = useState<Record<string, Candidatura>>({});
   const [comparacaoAberta, setComparacaoAberta] = useState(false);
   const [processandoLote, setProcessandoLote] = useState(false);
+  const [etiquetaAberta, setEtiquetaAberta] = useState(false);
+  const [etiquetas, setEtiquetas] = useState<{ codTag: string; nome: string; cor: string }[]>([]);
+  const [novaEtiqueta, setNovaEtiqueta] = useState("");
+
+  const carregarEtiquetas = useCallback(async () => {
+    const r = await api<{ codTag: string; nome: string; cor: string }[]>("/tags");
+    if (r.status === 200 && r.json) setEtiquetas(r.json);
+  }, []);
+
+  useEffect(() => {
+    if (etiquetaAberta) void carregarEtiquetas();
+  }, [etiquetaAberta, carregarEtiquetas]);
   const [tokenLocal, setTokenLocal] = useState(0);
 
   const recarregarTudo = useCallback(() => { setTokenLocal((t) => t + 1); pedirRecarga(); }, [pedirRecarga]);
@@ -74,6 +86,40 @@ export default function AbaCandidatos() {
    * Envia o link do portal por e-mail. Substitui o "copiar link" um a um, que
    * era o único jeito de o candidato chegar ao portal.
    */
+  /**
+   * Etiqueta em lote. As etiquetas ficam no CANDIDATO, não na candidatura:
+   * "fala inglês" continua valendo quando a pessoa se inscreve em outra vaga.
+   */
+  async function aplicarEtiqueta(codTag: string, acao: "adicionar" | "remover") {
+    setProcessandoLote(true);
+    const codCands = selecionadasObjs.map((c) => c.candidato.codCand);
+    const r = await api<{ afetados: number }>("/candidatos/tags-lote", {
+      metodo: "POST",
+      corpo: { codCands, codTag, acao },
+    });
+    setProcessandoLote(false);
+    setEtiquetaAberta(false);
+    if (r.status !== 201 && r.status !== 200) {
+      alert("Não foi possível aplicar a etiqueta.");
+      return;
+    }
+    setSelecionados([]);
+    recarregarTudo();
+  }
+
+  async function criarEtiqueta() {
+    const nome = novaEtiqueta.trim();
+    if (!nome) return;
+    const r = await api<{ codTag: string }>("/tags", { metodo: "POST", corpo: { nome } });
+    if (r.status !== 201 || !r.json) {
+      alert("Não foi possível criar a etiqueta.");
+      return;
+    }
+    setNovaEtiqueta("");
+    await carregarEtiquetas();
+    await aplicarEtiqueta(r.json.codTag, "adicionar");
+  }
+
   async function enviarPortalLote() {
     setProcessandoLote(true);
     const r = await api<{ enfileirados: number; repetidos: number; smtpConfigurado: boolean }>(
@@ -180,12 +226,56 @@ export default function AbaCandidatos() {
             <button key={a.estagio} onClick={() => moverLote(a.estagio)} disabled={processandoLote} style={estiloAcaoLote}>{a.rotulo}</button>
           ))}
           <button onClick={solicitarAvaliacaoLote} disabled={processandoLote} style={estiloAcaoLote}>Solicitar avaliação</button>
+          <button onClick={() => setEtiquetaAberta(true)} disabled={processandoLote} style={estiloAcaoLote}>Etiquetar</button>
           <button onClick={enviarPortalLote} disabled={processandoLote} style={estiloAcaoLote}>Enviar link do portal</button>
           <button onClick={exportarCsv} style={estiloAcaoLote}>Exportar CSV</button>
           <BotaoPrimario onClick={abrirComparacao} disabled={selecionados.length < 2} style={{ padding: "6px 12px", fontSize: 13 }}>Comparar</BotaoPrimario>
           <button onClick={() => setSelecionados([])} style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Limpar</button>
         </div>
       )}
+
+      <Gaveta titulo="Etiquetar candidatos" aberta={etiquetaAberta} fechar={() => setEtiquetaAberta(false)}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 14px", lineHeight: 1.55 }}>
+          A etiqueta fica no candidato, não nesta vaga — continua valendo quando ele se inscrever em
+          outra. {selecionados.length} selecionado(s).
+        </p>
+        <div style={{ display: "grid", gap: 8 }}>
+          {etiquetas.map((t) => (
+            <div key={t.codTag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, padding: "2px 9px", borderRadius: 999, background: t.cor, color: "#fff" }}>
+                {t.nome}
+              </span>
+              <button onClick={() => aplicarEtiqueta(t.codTag, "adicionar")} disabled={processandoLote} style={estiloAcaoLote}>
+                Aplicar
+              </button>
+              <button onClick={() => aplicarEtiqueta(t.codTag, "remover")} disabled={processandoLote} style={estiloAcaoLote}>
+                Remover
+              </button>
+            </div>
+          ))}
+          {etiquetas.length === 0 && (
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Nenhuma etiqueta criada ainda.</p>
+          )}
+        </div>
+        <div style={{ marginTop: 18, borderTop: "1px solid var(--border-default)", paddingTop: 14 }}>
+          <Campo rotulo="Criar e aplicar uma nova">
+            <Entrada
+              value={novaEtiqueta}
+              placeholder="ex.: fala inglês"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNovaEtiqueta(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void criarEtiqueta();
+                }
+              }}
+            />
+          </Campo>
+          <BotaoPrimario onClick={criarEtiqueta} disabled={processandoLote || !novaEtiqueta.trim()} style={{ marginTop: 10 }}>
+            Criar e aplicar
+          </BotaoPrimario>
+        </div>
+      </Gaveta>
 
       <GavetaComparacao candidaturas={selecionadasObjs.slice(0, 5)} aberta={comparacaoAberta} fechar={() => setComparacaoAberta(false)} />
       <CandidatoDrawer codCdt={drawerCodCdt} fechar={() => setDrawerCodCdt(null)} aoAtualizar={recarregarTudo} />

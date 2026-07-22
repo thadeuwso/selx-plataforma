@@ -1089,6 +1089,97 @@ verificar(
   reconvite.json?.codConv === conviteComEmail.json?.codConv && reconvite.json?.emailEnfileirado === false,
 );
 
+// 24b. Triagem em volume: etiquetas, favoritos e filtros salvos (RN-REC-017)
+// Segundo recrutador no mesmo tenant — favorito e filtro salvo são POR USUÁRIO,
+// e sem um colega não há como provar isso.
+const papelRec = await http("POST", "/papeis", {
+  nomePap: `Recrutador2 ${rodada}`,
+  permissoes: ["recrutamento.candidatos.ler", "recrutamento.candidatos.criar"],
+}, tokenA2);
+await http("POST", "/usuarios", {
+  nomeUsu: "Colega", email: `colega.${rodada}@teste.selx`, senha: "SenhaForte@123", papeis: [papelRec.json?.codPap],
+}, tokenA2);
+const tokenColega = (await http("POST", "/auth/login", { email: `colega.${rodada}@teste.selx`, senha: "SenhaForte@123" })).json?.accessToken;
+
+const vagaTri = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Triagem" }, tokenA2);
+await http("PATCH", `/vagas/${vagaTri.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaTri.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtA = await http("POST", `/vagas/${vagaTri.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Etiquetado A", email: `tagA.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+const cdtB = await http("POST", `/vagas/${vagaTri.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Etiquetado B", email: `tagB.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+
+const tagIngles = await http("POST", "/tags", { nome: `Ingles ${rodada}`, cor: "#2E6B4F" }, tokenA2);
+const tagSenior = await http("POST", "/tags", { nome: `Senior ${rodada}` }, tokenA2);
+verificar("cria etiqueta (201)", tagIngles.status === 201 && tagIngles.json?.cor === "#2E6B4F");
+verificar(
+  "cor inválida é recusada → 400",
+  (await http("POST", "/tags", { nome: "X", cor: "verde" }, tokenA2)).status === 400,
+);
+
+const candA = (await http("GET", `/candidaturas/${cdtA.json?.codCdt}`, null, tokenA2)).json?.candidato?.codCand;
+const candB = (await http("GET", `/candidaturas/${cdtB.json?.codCdt}`, null, tokenA2)).json?.candidato?.codCand;
+const aplicou = await http("POST", "/candidatos/tags-lote", { codCands: [candA, candB], codTag: tagIngles.json?.codTag }, tokenA2);
+verificar("aplica etiqueta em lote (2 candidatos)", aplicou.json?.afetados === 2);
+verificar(
+  "reaplicar não falha nem duplica",
+  (await http("POST", "/candidatos/tags-lote", { codCands: [candA, candB], codTag: tagIngles.json?.codTag }, tokenA2)).json?.afetados === 0,
+);
+await http("POST", "/candidatos/tags-lote", { codCands: [candA], codTag: tagSenior.json?.codTag }, tokenA2);
+
+const porUmaTag = await http("GET", `/vagas/${vagaTri.json?.codVag}/candidaturas?tags=${tagIngles.json?.codTag}`, null, tokenA2);
+verificar("filtra por etiqueta", porUmaTag.json?.total === 2);
+// Filtrar por duas etiquetas exige as duas — receber quem tem só uma não é o
+// que se pediu.
+const porDuasTags = await http("GET", `/vagas/${vagaTri.json?.codVag}/candidaturas?tags=${tagIngles.json?.codTag},${tagSenior.json?.codTag}`, null, tokenA2);
+verificar(
+  "filtro por duas etiquetas exige AMBAS, não qualquer uma",
+  porDuasTags.json?.total === 1 && porDuasTags.json.itens[0].candidato.nomeCand === "Etiquetado A",
+);
+verificar("a lista devolve as etiquetas do candidato", porUmaTag.json.itens[0].candidato.tags?.length >= 1);
+verificar(
+  "remove etiqueta em lote",
+  (await http("POST", "/candidatos/tags-lote", { codCands: [candB], codTag: tagIngles.json?.codTag, acao: "remover" }, tokenA2)).json?.afetados === 1,
+);
+
+await http("POST", `/candidaturas/${cdtA.json?.codCdt}/favorito`, {}, tokenA2);
+const meusFavoritos = await http("GET", `/vagas/${vagaTri.json?.codVag}/candidaturas?favoritos=S`, null, tokenA2);
+verificar("filtra pelos meus favoritos", meusFavoritos.json?.total === 1);
+verificar("a lista marca o que é meu favorito", meusFavoritos.json.itens[0].favoritas?.length === 1);
+verificar(
+  "favorito de um recrutador NÃO aparece para o colega",
+  (await http("GET", `/vagas/${vagaTri.json?.codVag}/candidaturas?favoritos=S`, null, tokenColega)).json?.total === 0,
+);
+verificar(
+  "desfavoritar tira da lista",
+  (await http("DELETE", `/candidaturas/${cdtA.json?.codCdt}/favorito`, null, tokenA2)).status === 200 &&
+    (await http("GET", `/vagas/${vagaTri.json?.codVag}/candidaturas?favoritos=S`, null, tokenA2)).json?.total === 0,
+);
+
+const filtroSalvo = await http("POST", "/filtros-salvos", {
+  nome: "Meu recorte", filtros: { estagio: "screening", aderenciaMin: 70 },
+}, tokenA2);
+verificar("salva um filtro (201)", filtroSalvo.status === 201);
+verificar(
+  "salvar com o mesmo nome sobrescreve, não duplica",
+  (await http("POST", "/filtros-salvos", { nome: "Meu recorte", filtros: { estagio: "interview" } }, tokenA2)).status === 201 &&
+    (await http("GET", "/filtros-salvos", null, tokenA2)).json?.filter((f) => f.nome === "Meu recorte").length === 1,
+);
+verificar(
+  "filtro salvo de um recrutador não aparece para o colega",
+  !(await http("GET", "/filtros-salvos", null, tokenColega)).json?.some((f) => f.nome === "Meu recorte"),
+);
+verificar(
+  "um recrutador não apaga o filtro salvo do colega",
+  (await http("DELETE", `/filtros-salvos/${filtroSalvo.json?.codFiltro}`, null, tokenColega)).status === 400,
+);
+verificar(
+  "tenant B não enxerga as etiquetas do tenant A",
+  !(await http("GET", "/tags", null, tokenB)).json?.some((t) => t.codTag === tagIngles.json?.codTag),
+);
+
 // 25a. Campos estruturados do candidato (RN-REC-016)
 const vagaEst = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Estruturados" }, tokenA2);
 await http("PATCH", `/vagas/${vagaEst.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);

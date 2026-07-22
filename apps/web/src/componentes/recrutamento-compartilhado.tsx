@@ -16,7 +16,16 @@ export interface Candidatura {
   dhInc: string;
   codFun: string | null;
   knockoutJson: { pergunta: string } | null;
-  candidato: { codCand: string; nomeCand: string; email: string; cidade: string | null; cargoAtual: string | null };
+  candidato: {
+    codCand: string;
+    nomeCand: string;
+    email: string;
+    cidade: string | null;
+    cargoAtual: string | null;
+    tags?: { tag: { codTag: string; nome: string; cor: string } }[];
+  };
+  /** Só o favorito de quem está olhando — favorito é marca pessoal. */
+  favoritas?: { codFav: string }[];
   canal: { nomeCanal: string };
   match: {
     scoreGeral: number;

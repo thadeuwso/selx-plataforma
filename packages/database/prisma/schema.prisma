@@ -61,6 +61,10 @@ model Tenant {
   entrevistas    Entrevista[]
   entrevistaHorarios EntrevistaHorario[]
   formacoes      FormacaoCandidato[]
+  tags           Tag[]
+  candidatoTags  CandidatoTag[]
+  favoritas      CandidaturaFavorita[]
+  filtrosSalvos  FiltroSalvo[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -275,6 +279,8 @@ model Usuario {
   sessoes     Sessao[]
   vagasResp   Vaga[]         @relation("VagaResponsavel")
   entrevistas Entrevista[]   @relation("EntrevistaEntrevistador")
+  favoritas   CandidaturaFavorita[]
+  filtrosSalvos FiltroSalvo[]
 
   @@unique([codTen, email])
   @@map("TSIUSU")
@@ -656,6 +662,7 @@ model Candidato {
   curriculos   CandidatoCurriculo[]
   respostasCulturais RespostaCultural[]
   formacoes    FormacaoCandidato[]
+  tags         CandidatoTag[]
   candidaturas Candidatura[]
 
   @@unique([codTen, email])
@@ -710,6 +717,7 @@ model Candidatura {
   match     MatchResumo?
   iaAnalises IAAnaliseCandidatura[]
   entrevistas Entrevista[]
+  favoritas  CandidaturaFavorita[]
   processoAdmissao ProcessoAdmissao?
   convitesComportamentais ConviteComportamental[]
 
@@ -823,6 +831,96 @@ model RespostaCultural {
   @@unique([codCand, codCulPer])
   @@index([codTen, codCand])
   @@map("TRECULRESP")
+}
+
+/// Etiqueta do banco de talentos (RN-REC-017).
+///
+/// Presa ao **candidato**, não à candidatura: "fala inglês" ou "já foi
+/// entrevistado aqui" continua valendo quando a pessoa se inscreve em outra
+/// vaga. Presa à candidatura, a informação se perderia a cada nova inscrição.
+model Tag {
+  codTag    BigInt   @id @default(autoincrement()) @map("CODTAG")
+  codTen    BigInt   @map("CODTEN")
+  nome      String   @map("NOME")
+  /// Cor em hex — em volume, a leitura é visual antes de ser textual.
+  cor       String   @default("#8A5B3F") @map("COR")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+
+  tenant     Tenant         @relation(fields: [codTen], references: [codTen])
+  candidatos CandidatoTag[]
+
+  @@unique([codTen, nome])
+  @@map("TRETAG")
+}
+
+/// Etiqueta aplicada a um candidato (RN-REC-017).
+model CandidatoTag {
+  codCandTag BigInt   @id @default(autoincrement()) @map("CODCANDTAG")
+  codTen     BigInt   @map("CODTEN")
+  codCand    BigInt   @map("CODCAND")
+  codTag     BigInt   @map("CODTAG")
+  dhInc      DateTime @default(now()) @map("DHINC")
+  codUsuInc  BigInt?  @map("CODUSUINC")
+  /// Soft-delete: o papel da aplicação não tem DELETE em tabela nenhuma
+  /// (convenção da plataforma, migration core_v1) — e o histórico de quem
+  /// marcou o quê tem valor.
+  ativo      String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant    Tenant    @relation(fields: [codTen], references: [codTen])
+  candidato Candidato @relation(fields: [codCand], references: [codCand])
+  tag       Tag       @relation(fields: [codTag], references: [codTag])
+
+  @@unique([codCand, codTag])
+  @@index([codTen, codTag])
+  @@map("TRECANDTAG")
+}
+
+/// Candidatura favoritada (RN-REC-017).
+///
+/// **Por usuário**, não por candidatura: o favorito de um recrutador não é o do
+/// outro. É a diferença entre uma marca pessoal de trabalho e um atributo do
+/// candidato — tratar as duas como a mesma coisa faria dois recrutadores
+/// disputarem a mesma lista.
+model CandidaturaFavorita {
+  codFav BigInt   @id @default(autoincrement()) @map("CODFAV")
+  codTen BigInt   @map("CODTEN")
+  codCdt BigInt   @map("CODCDT")
+  codUsu BigInt   @map("CODUSU")
+  dhInc  DateTime @default(now()) @map("DHINC")
+  /// Soft-delete: desfavoritar apaga a marca, não a linha (sem DELETE).
+  ativo  String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
+  usuario     Usuario     @relation(fields: [codUsu], references: [codUsu])
+
+  @@unique([codCdt, codUsu])
+  @@index([codTen, codUsu])
+  @@map("TRECDTFAV")
+}
+
+/// Filtro salvo da lista de candidaturas (RN-REC-017).
+///
+/// Por usuário, pelo mesmo motivo do favorito: o recorte que um recrutador usa
+/// todo dia não é o do colega.
+model FiltroSalvo {
+  codFiltro   BigInt   @id @default(autoincrement()) @map("CODFILTRO")
+  codTen      BigInt   @map("CODTEN")
+  codUsu      BigInt   @map("CODUSU")
+  nome        String   @map("NOME")
+  /// Os parâmetros da lista, no mesmo formato da query string.
+  filtrosJson Json     @map("FILTROSJSON")
+  dhInc       DateTime @default(now()) @map("DHINC")
+  /// Soft-delete, mesma razão das demais.
+  ativo       String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant  Tenant  @relation(fields: [codTen], references: [codTen])
+  usuario Usuario @relation(fields: [codUsu], references: [codUsu])
+
+  @@unique([codTen, codUsu, nome])
+  @@map("TREFILTRO")
 }
 
 /// Formação do candidato (RN-REC-016).

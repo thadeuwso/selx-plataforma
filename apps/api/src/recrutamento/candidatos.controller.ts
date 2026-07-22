@@ -53,6 +53,9 @@ const esquemaListaCandidaturas = z.object({
   pretensaoMax: z.coerce.number().min(0).optional(),
   dispTipo: z.enum(TIPOS_DISPONIBILIDADE).optional(),
   formacaoMin: z.enum(NIVEIS_FORMACAO).optional(),
+  // RN-REC-017: triagem em volume.
+  tags: z.string().optional(),
+  favoritos: z.enum(['S']).optional(),
 });
 
 function ordenarPorParaOrderBy(ordenar: (typeof ORDENACOES)[number]): Prisma.CandidaturaOrderByWithRelationInput {
@@ -619,7 +622,20 @@ export class CandidatosController {
         const aceitos = NIVEIS_FORMACAO.filter((n) => ordemNivel(n) >= ordemNivel(dados.formacaoMin!));
         filtroCandidato.formacoes = { some: { situacao: 'CONCLUIDO', nivel: { in: [...aceitos] } } };
       }
+      if (dados.tags) {
+        // Todas as etiquetas pedidas, não qualquer uma: filtrar por "inglês" e
+        // "sênior" e receber quem tem só uma delas não é o que se pediu.
+        const codTags = dados.tags.split(',').map((t) => BigInt(t.trim())).filter(Boolean);
+        filtroCandidato.AND = [
+          ...((filtroCandidato.AND as Prisma.CandidatoWhereInput[]) ?? []),
+          ...codTags.map((codTag) => ({ tags: { some: { codTag, ativo: 'S' } } })),
+        ];
+      }
       if (Object.keys(filtroCandidato).length > 0) where.candidato = filtroCandidato;
+      // Favorito é por usuário: o filtro só enxerga os do próprio recrutador.
+      if (dados.favoritos === 'S') {
+        where.favoritas = { some: { codUsu: req.usuario.codUsu, ativo: 'S' } };
+      }
 
       const [itens, total] = await Promise.all([
         tx.candidatura.findMany({
@@ -633,7 +649,14 @@ export class CandidatosController {
             dhInc: true,
             codFun: true,
             knockoutJson: true,
-            candidato: { select: { codCand: true, nomeCand: true, email: true, cidade: true, cargoAtual: true } },
+            candidato: {
+              select: {
+                codCand: true, nomeCand: true, email: true, cidade: true, cargoAtual: true,
+                tags: { where: { ativo: 'S' }, select: { tag: { select: { codTag: true, nome: true, cor: true } } } },
+              },
+            },
+            // Só o favorito de quem está olhando: favorito é marca pessoal.
+            favoritas: { where: { codUsu: req.usuario.codUsu, ativo: 'S' }, select: { codFav: true } },
             canal: { select: { nomeCanal: true } },
             match: {
               select: { scoreGeral: true, scoreContratacao: true, scoreCultura: true, driverPrincipal: true, qtdGapsCrit: true },

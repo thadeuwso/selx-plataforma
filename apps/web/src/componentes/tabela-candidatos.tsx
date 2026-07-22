@@ -61,6 +61,17 @@ export function TabelaCandidatos({
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
 
+  const ehFavorito = (c: Candidatura) => (c.favoritas?.length ?? 0) > 0;
+
+  /**
+   * Alterna o favorito e recarrega. Sem otimismo na tela: favoritar é barato e
+   * a confirmação vinda do servidor evita mostrar estrela cheia se falhou.
+   */
+  async function alternarFavorito(c: Candidatura) {
+    await api(`/candidaturas/${c.codCdt}/favorito`, { metodo: ehFavorito(c) ? "DELETE" : "POST" });
+    await carregar();
+  }
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(false);
@@ -141,6 +152,7 @@ export function TabelaCandidatos({
                   aria-label="Selecionar página"
                 />
               </th>
+              <th style={{ ...celCabecalho, width: 30 }} title="Favoritos (só seus)">★</th>
               <th style={celCabecalho}>Candidato</th>
               <th style={celCabecalho}>Cargo atual</th>
               <th style={celCabecalho}>Local</th>
@@ -158,18 +170,18 @@ export function TabelaCandidatos({
             {carregando && itens.length === 0 &&
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={`sk-${i}`}>
-                  <td style={cel} colSpan={12}>
+                  <td style={cel} colSpan={13}>
                     <div style={{ height: 16, background: "var(--surface-page)", borderRadius: 4, opacity: 0.6 }} />
                   </td>
                 </tr>
               ))}
             {!carregando && erro && (
-              <tr><td style={{ ...cel, textAlign: "center", color: "var(--red-600, #9A3833)", padding: 24 }} colSpan={12}>
+              <tr><td style={{ ...cel, textAlign: "center", color: "var(--red-600, #9A3833)", padding: 24 }} colSpan={13}>
                 Não foi possível carregar os candidatos. <button onClick={() => carregar()} style={{ color: "var(--text-link)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}>Tentar de novo</button>
               </td></tr>
             )}
             {!carregando && !erro && itens.length === 0 && (
-              <tr><td style={{ ...cel, textAlign: "center", color: "var(--text-muted)", padding: 24 }} colSpan={12}>Nenhum candidato para esses filtros.</td></tr>
+              <tr><td style={{ ...cel, textAlign: "center", color: "var(--text-muted)", padding: 24 }} colSpan={13}>Nenhum candidato para esses filtros.</td></tr>
             )}
             {itens.map((c) => {
               const av = statusAvaliacao(c);
@@ -183,9 +195,37 @@ export function TabelaCandidatos({
                   <td style={cel} onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selecionados.includes(c.codCdt)} onChange={() => alternarSelecao(c.codCdt)} aria-label={`Selecionar ${c.candidato.nomeCand}`} />
                   </td>
+                  <td style={cel} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => alternarFavorito(c)}
+                      title={ehFavorito(c) ? "Remover dos meus favoritos" : "Marcar como meu favorito"}
+                      style={{
+                        background: "none", border: "none", cursor: "pointer", padding: 0,
+                        fontSize: 15, lineHeight: 1,
+                        color: ehFavorito(c) ? "var(--amber-700, #714E08)" : "var(--border-default)",
+                      }}
+                    >
+                      {ehFavorito(c) ? "★" : "☆"}
+                    </button>
+                  </td>
                   <td style={cel}>
                     <div style={{ fontWeight: 600 }}>{c.candidato.nomeCand}</div>
                     <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{c.candidato.email}</div>
+                    {(c.candidato.tags?.length ?? 0) > 0 && (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                        {c.candidato.tags!.map((t) => (
+                          <span
+                            key={t.tag.codTag}
+                            style={{
+                              fontSize: 10, padding: "1px 7px", borderRadius: 999,
+                              background: t.tag.cor, color: "#fff", whiteSpace: "nowrap",
+                            }}
+                          >
+                            {t.tag.nome}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td style={{ ...cel, color: "var(--text-muted)" }}>{c.candidato.cargoAtual ?? "—"}</td>
                   <td style={{ ...cel, color: "var(--text-muted)" }}>{c.candidato.cidade ?? "—"}</td>
