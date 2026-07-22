@@ -57,6 +57,7 @@ model Tenant {
   iaAnalises     IAAnaliseCandidatura[]
   configIa       ConfiguracaoIa?
   culturaPadrao  CulturaPadraoEmpresa?
+  emails         EmailFila[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -793,6 +794,40 @@ model RespostaCultural {
   @@unique([codCand, codCulPer])
   @@index([codTen, codCand])
   @@map("TRECULRESP")
+}
+
+/// Fila de e-mails (RN-SX-001).
+///
+/// **Fila, não envio direto.** Mandar o e-mail dentro da requisição amarraria a
+/// ação do recrutador à saúde do SMTP: servidor fora do ar viraria "não foi
+/// possível convidar o candidato", quando o convite na verdade foi criado. Aqui
+/// a ação grava a intenção e responde; a entrega é assíncrona e retentável.
+///
+/// Porte do `EmailOutbox` do SelX 1.0, que já usava esse desenho.
+model EmailFila {
+  codEmail     BigInt    @id @default(autoincrement()) @map("CODEMAIL")
+  codTen       BigInt    @map("CODTEN")
+  destinatario String    @map("DESTINATARIO")
+  assunto      String    @map("ASSUNTO")
+  corpoTexto   String    @map("CORPOTEXTO") @db.Text
+  corpoHtml    String?   @map("CORPOHTML") @db.Text
+  template     String    @map("TEMPLATE")
+  /// Chave de idempotência: impede que a mesma mensagem saia duas vezes quando
+  /// o recrutador clica de novo ou a fila é reprocessada. E-mail repetido para
+  /// candidato é dano de reputação, não incômodo.
+  chaveIdem    String    @unique @map("CHAVEIDEM")
+  status       String    @default("PENDENTE") @map("STATUS")
+  tentativas   Int       @default(0) @map("TENTATIVAS")
+  erro         String?   @map("ERRO") @db.Text
+  dhEnvio      DateTime? @map("DHENVIO")
+  dhInc        DateTime  @default(now()) @map("DHINC")
+  codUsuInc    BigInt?   @map("CODUSUINC")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+
+  @@index([status, dhInc])
+  @@index([codTen, dhInc])
+  @@map("TSXEMAIL")
 }
 
 /// Configuração de IA por tenant.

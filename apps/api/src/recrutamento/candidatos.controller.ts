@@ -14,6 +14,7 @@ import {
   type PerfilCultural,
 } from './calcular-match';
 import { montarEvidencias } from './analise-candidato';
+import { EmailService } from '../compartilhado/email/email.service';
 
 export const ESTAGIOS = [
   'applied', 'screening', 'analysis', 'knockout', 'shortlist', 'interview',
@@ -224,6 +225,7 @@ export class CandidatosController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly funcionariosService: FuncionariosService,
+    private readonly email: EmailService,
   ) {}
 
   // ===== Canais de captação =====
@@ -802,6 +804,67 @@ export class CandidatosController {
       });
       return { tokenPub: atualizada.tokenPub };
     });
+  }
+
+  /**
+   * Envia o link do portal por e-mail (RN-SX-001), em uma candidatura ou em lote.
+   *
+   * É o que faltava para o portal existir de verdade: até aqui o recrutador
+   * copiava o link de um alerta e colava à mão, um por um.
+   */
+  @Post('candidaturas/enviar-portal')
+  @Permissoes('recrutamento.candidatos.criar')
+  async enviarPortal(@Req() req: ReqAut, @Body() corpo: unknown) {
+    const dados = validar(z.object({ codCdts: z.array(z.coerce.bigint()).min(1).max(200) }), corpo);
+    const codTen = req.usuario.codTen;
+
+    const candidaturas = await this.prisma.executarNoTenant(codTen, async (tx) => {
+      const lista = await tx.candidatura.findMany({
+        where: { codCdt: { in: dados.codCdts }, ativo: 'S' },
+        include: {
+          candidato: { select: { nomeCand: true, email: true } },
+          vaga: { select: { titulo: true, empresa: { select: { nomeFantasia: true } } } },
+        },
+      });
+      // Gera o token de quem ainda não tem: enviar exige link, e o link é o token.
+      for (const c of lista.filter((x) => !x.tokenPub)) {
+        const token = randomBytes(24).toString('hex');
+        await tx.candidatura.update({ where: { codCdt: c.codCdt }, data: { tokenPub: token } });
+        c.tokenPub = token;
+      }
+      return lista;
+    });
+
+    const base = process.env.APP_URL ?? 'http://localhost:3002';
+    let enfileirados = 0;
+    let repetidos = 0;
+    for (const c of candidaturas) {
+      const r = await this.email.enfileirar({
+        codTen,
+        destinatario: c.candidato.email,
+        template: 'portal-candidato',
+        // Uma mensagem de portal por candidatura: reenviar não duplica.
+        chaveIdem: `portal:${c.codCdt}`,
+        codUsuInc: req.usuario.codUsu,
+        drenarAgora: false,
+        dados: {
+          nomeCandidato: c.candidato.nomeCand,
+          nomeEmpresa: c.vaga.empresa.nomeFantasia,
+          tituloVaga: c.vaga.titulo,
+          url: `${base}/acompanhar/${c.tokenPub}`,
+        },
+      });
+      if (r.jaExistia) repetidos++;
+      else enfileirados++;
+    }
+    // Um dreno só, depois de enfileirar tudo.
+    void this.email.drenar();
+    return {
+      enfileirados,
+      repetidos,
+      naoEncontrados: dados.codCdts.length - candidaturas.length,
+      smtpConfigurado: this.email.configurado(),
+    };
   }
 
   /** Ações em massa (mover etapa/reprovar/arquivar são a mesma rota, só muda o estágio-alvo). */

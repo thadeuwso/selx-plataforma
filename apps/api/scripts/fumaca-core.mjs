@@ -1039,6 +1039,48 @@ verificar("remove responsável (null) limpa o campo", limpaResp.status === 200 &
 const respOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenB);
 verificar("tenant B não atribui responsável em vaga do tenant A → 400", respOutroTenant.status === 400);
 
+// 25b. Fila de e-mails (RN-SX-001)
+// Não valida entrega — isso depende de SMTP e o teste não pode depender de rede.
+// Valida o que é da plataforma: enfileirar, idempotência e isolamento.
+const vagaMail = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga E-mail" }, tokenA2);
+await http("PATCH", `/vagas/${vagaMail.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaMail.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtMail = await http("POST", `/vagas/${vagaMail.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Candidato Email", email: `email.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+
+const envio1 = await http("POST", "/candidaturas/enviar-portal", { codCdts: [cdtMail.json?.codCdt] }, tokenA2);
+verificar(
+  "envia o link do portal por e-mail (enfileira 1)",
+  envio1.status === 201 && envio1.json?.enfileirados === 1 && envio1.json?.repetidos === 0,
+);
+// E-mail repetido para candidato é dano de reputação, não incômodo.
+const envio2 = await http("POST", "/candidaturas/enviar-portal", { codCdts: [cdtMail.json?.codCdt] }, tokenA2);
+verificar(
+  "reenviar não duplica a mensagem (idempotência por chave)",
+  envio2.json?.enfileirados === 0 && envio2.json?.repetidos === 1,
+);
+// Enviar exige link, e o link é o token: quem não tinha, passa a ter.
+const cdtComToken = await http("GET", `/candidaturas/${cdtMail.json?.codCdt}`, null, tokenA2);
+verificar("enviar o portal gera o token de quem ainda não tinha", !!cdtComToken.json?.tokenPub);
+
+const envioB = await http("POST", "/candidaturas/enviar-portal", { codCdts: [cdtMail.json?.codCdt] }, tokenB);
+verificar(
+  "tenant B não envia e-mail para candidatura do tenant A (0 encontradas)",
+  envioB.json?.enfileirados === 0 && envioB.json?.naoEncontrados === 1,
+);
+
+const conviteComEmail = await http("POST", `/candidaturas/${cdtMail.json?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
+verificar(
+  "convite de avaliação enfileira o e-mail junto",
+  conviteComEmail.status === 201 && conviteComEmail.json?.emailEnfileirado === true,
+);
+const reconvite = await http("POST", `/candidaturas/${cdtMail.json?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenA2);
+verificar(
+  "reconvidar reaproveita o convite e NÃO manda segundo e-mail",
+  reconvite.json?.codConv === conviteComEmail.json?.codConv && reconvite.json?.emailEnfileirado === false,
+);
+
 // 26a. Cultura da empresa e questionário cultural do candidato (RN-REC-014)
 const culturaAntes = await http("GET", "/configuracoes/cultura", null, tokenA2);
 verificar("cultura da empresa começa indefinida", culturaAntes.status === 200 && culturaAntes.json?.definida === false);

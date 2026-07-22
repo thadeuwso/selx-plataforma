@@ -70,6 +70,32 @@ export default function AbaCandidatos() {
     recarregarTudo();
   }
 
+  /**
+   * Envia o link do portal por e-mail. Substitui o "copiar link" um a um, que
+   * era o único jeito de o candidato chegar ao portal.
+   */
+  async function enviarPortalLote() {
+    setProcessandoLote(true);
+    const r = await api<{ enfileirados: number; repetidos: number; smtpConfigurado: boolean }>(
+      "/candidaturas/enviar-portal",
+      { metodo: "POST", corpo: { codCdts: selecionados } },
+    );
+    setProcessandoLote(false);
+    if (r.status !== 201 && r.status !== 200) {
+      alert("Não foi possível enviar agora.");
+      return;
+    }
+    const d = r.json!;
+    alert(
+      d.smtpConfigurado
+        ? `${d.enfileirados} e-mail(s) na fila de envio.` +
+          (d.repetidos ? ` ${d.repetidos} já haviam sido enviados antes.` : "")
+        : "Servidor de e-mail não configurado. As mensagens ficaram na fila e sairão assim que ele existir.",
+    );
+    setSelecionados([]);
+    recarregarTudo();
+  }
+
   function exportarCsv() {
     const linhas = [["Nome", "E-mail", "Cargo atual", "Local", "Etapa", "Aderência geral", "Aderência técnica", "Gaps"].join(",")];
     for (const c of selecionadasObjs.length ? selecionadasObjs : Object.values(carregadas)) {
@@ -154,6 +180,7 @@ export default function AbaCandidatos() {
             <button key={a.estagio} onClick={() => moverLote(a.estagio)} disabled={processandoLote} style={estiloAcaoLote}>{a.rotulo}</button>
           ))}
           <button onClick={solicitarAvaliacaoLote} disabled={processandoLote} style={estiloAcaoLote}>Solicitar avaliação</button>
+          <button onClick={enviarPortalLote} disabled={processandoLote} style={estiloAcaoLote}>Enviar link do portal</button>
           <button onClick={exportarCsv} style={estiloAcaoLote}>Exportar CSV</button>
           <BotaoPrimario onClick={abrirComparacao} disabled={selecionados.length < 2} style={{ padding: "6px 12px", fontSize: 13 }}>Comparar</BotaoPrimario>
           <button onClick={() => setSelecionados([])} style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Limpar</button>

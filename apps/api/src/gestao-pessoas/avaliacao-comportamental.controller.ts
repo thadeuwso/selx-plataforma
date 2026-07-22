@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { randomBytes } from 'node:crypto';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
+import { EmailService } from '../compartilhado/email/email.service';
 import { calcularAderenciaVaga, calcularResultadoPorFaceta, type PerfilVagaFator, type RespostaFaceta } from './calcular-resultado';
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
@@ -12,25 +13,54 @@ const STATUS_REUTILIZAVEL = ['REVOGADO', 'EXPIRADO'];
 /** Convite e acompanhamento da Avaliação Comportamental por candidatura (RH). */
 @Controller('candidaturas/:codCdt/avaliacao-comportamental')
 export class AvaliacaoComportamentalController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly email: EmailService,
+  ) {}
 
   /** Gera o link público (token opaco, ADR-0004 §5) — usa o modelo do perfil da vaga, ou o padrão se a vaga não tiver perfil configurado. */
   @Post('convidar')
   @Permissoes('gestaopessoas.avaliacoes.criar')
-  convidar(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
-    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+  async convidar(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
+    const resultado = await this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
       const cdt = await tx.candidatura.findFirst({
         where: { codCdt: BigInt(codCdt), ativo: 'S' },
-        include: { vaga: { include: { perfisComportamentais: { where: { ativo: 'S' } } } } },
+        include: {
+          candidato: { select: { nomeCand: true, email: true } },
+          vaga: {
+            include: {
+              perfisComportamentais: { where: { ativo: 'S' } },
+              empresa: { select: { nomeFantasia: true } },
+            },
+          },
+        },
       });
       if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
+
+      const contexto = {
+        email: cdt.candidato.email,
+        nomeCand: cdt.candidato.nomeCand,
+        tituloVaga: cdt.vaga.titulo,
+        nomeEmpresa: cdt.vaga.empresa.nomeFantasia,
+      };
 
       const existente = await tx.conviteComportamental.findFirst({
         where: { codCdt: cdt.codCdt },
         orderBy: { codConv: 'desc' },
       });
+      // Reconvidar reaproveita o convite: o e-mail volta a ser enfileirado, mas
+      // com a mesma chave de idempotência — o candidato não recebe duas vezes.
       if (existente && !STATUS_REUTILIZAVEL.includes(existente.status)) {
-        return { codConv: existente.codConv, tokenPub: existente.tokenPub, status: existente.status };
+        const modelo = await tx.modeloAvaliacaoComportamental.findFirst({
+          where: { codMod: existente.codMod },
+          select: { tempoEstimadoMin: true, tempoEstimadoMax: true, _count: { select: { perguntas: true } } },
+        });
+        return {
+          codConv: existente.codConv,
+          tokenPub: existente.tokenPub,
+          status: existente.status,
+          contexto: { ...contexto, modelo },
+        };
       }
 
       const perfilVaga = cdt.vaga.perfisComportamentais[0];
@@ -45,6 +75,11 @@ export class AvaliacaoComportamentalController {
         )?.codMod;
       if (!codMod) throw new BadRequestException('Nenhum modelo de avaliação comportamental disponível');
 
+      const modelo = await tx.modeloAvaliacaoComportamental.findFirst({
+        where: { codMod },
+        select: { tempoEstimadoMin: true, tempoEstimadoMax: true, _count: { select: { perguntas: true } } },
+      });
+
       const dhExpiracao = new Date();
       dhExpiracao.setDate(dhExpiracao.getDate() + 7);
 
@@ -58,8 +93,35 @@ export class AvaliacaoComportamentalController {
           codUsuInc: req.usuario.codUsu,
         },
       });
-      return { codConv: convite.codConv, tokenPub: convite.tokenPub, status: convite.status };
+      return {
+        codConv: convite.codConv,
+        tokenPub: convite.tokenPub,
+        status: convite.status,
+        contexto: { ...contexto, modelo },
+      };
     });
+
+    // Fora da transação: enfileirar o e-mail não pode segurar o commit do
+    // convite nem derrubá-lo se a fila falhar (RN-SX-001).
+    const { contexto, ...convite } = resultado;
+    const base = process.env.APP_URL ?? 'http://localhost:3002';
+    const envio = await this.email.enfileirar({
+      codTen: req.usuario.codTen,
+      destinatario: contexto.email,
+      template: 'avaliacao-comportamental',
+      chaveIdem: `avaliacao:${convite.codConv}`,
+      codUsuInc: req.usuario.codUsu,
+      dados: {
+        nomeCandidato: contexto.nomeCand,
+        nomeEmpresa: contexto.nomeEmpresa,
+        tituloVaga: contexto.tituloVaga,
+        url: `${base}/avaliacao-comportamental/${convite.tokenPub}`,
+        totalPerguntas: contexto.modelo?._count.perguntas,
+        tempoMin: contexto.modelo?.tempoEstimadoMin ?? null,
+        tempoMax: contexto.modelo?.tempoEstimadoMax ?? null,
+      },
+    });
+    return { ...convite, emailEnfileirado: !envio.jaExistia, smtpConfigurado: this.email.configurado() };
   }
 
   /** Status, respostas e resultado (com aderência à vaga, se houver perfil configurado). */

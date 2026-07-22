@@ -8,6 +8,7 @@ import { UsuariosModule } from './core/usuarios/usuarios.module';
 import { GestaoPessoasModule } from './gestao-pessoas/gestao-pessoas.module';
 import { RecrutamentoModule } from './recrutamento/recrutamento.module';
 import { PrismaModule } from './compartilhado/prisma/prisma.module';
+import { EmailModule } from './compartilhado/email/email.module';
 import { SaudeModule } from './compartilhado/saude/saude.module';
 
 /**
@@ -23,6 +24,7 @@ import { SaudeModule } from './compartilhado/saude/saude.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    EmailModule,
     SaudeModule,
     AuthModule,
     EmpresasModule,
