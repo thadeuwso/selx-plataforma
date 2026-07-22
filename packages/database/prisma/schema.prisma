@@ -58,6 +58,8 @@ model Tenant {
   configIa       ConfiguracaoIa?
   culturaPadrao  CulturaPadraoEmpresa?
   emails         EmailFila[]
+  entrevistas    Entrevista[]
+  entrevistaHorarios EntrevistaHorario[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -271,6 +273,7 @@ model Usuario {
   papeis      UsuarioPapel[]
   sessoes     Sessao[]
   vagasResp   Vaga[]         @relation("VagaResponsavel")
+  entrevistas Entrevista[]   @relation("EntrevistaEntrevistador")
 
   @@unique([codTen, email])
   @@map("TSIUSU")
@@ -511,6 +514,7 @@ model Vaga {
   cargo        Cargo?        @relation(fields: [codCar], references: [codCar])
   responsavel  Usuario?      @relation("VagaResponsavel", fields: [codUsuResp], references: [codUsu])
   requisitos   VagaRequisito[]
+  entrevistaHorarios EntrevistaHorario[]
   perguntas    VagaPergunta[]
   canais       VagaCanal[]
   candidaturas Candidatura[]
@@ -685,6 +689,7 @@ model Candidatura {
   timeline  CandidaturaHistorico[]
   match     MatchResumo?
   iaAnalises IAAnaliseCandidatura[]
+  entrevistas Entrevista[]
   processoAdmissao ProcessoAdmissao?
   convitesComportamentais ConviteComportamental[]
 
@@ -798,6 +803,75 @@ model RespostaCultural {
   @@unique([codCand, codCulPer])
   @@index([codTen, codCand])
   @@map("TRECULRESP")
+}
+
+/// Horário de entrevista aberto pelo recrutador (RN-REC-015).
+///
+/// O recrutador abre a grade; o candidato escolhe pelo portal. É o desenho do
+/// `InterviewSlot` do SelX 1.0, e existe para eliminar a negociação por e-mail
+/// ("pode terça às 14h?") que consome o tempo do recrutador.
+model EntrevistaHorario {
+  codHor      BigInt   @id @default(autoincrement()) @map("CODHOR")
+  codTen      BigInt   @map("CODTEN")
+  codVag      BigInt   @map("CODVAG")
+  dhInicio    DateTime @map("DHINICIO")
+  duracaoMin  Int      @default(45) @map("DURACAOMIN")
+  tipo        String   @default("VIDEO") @map("TIPO")
+  local       String?  @map("LOCAL")
+  linkReuniao String?  @map("LINKREUNIAO") @db.Text
+  /// Quem conduz. Nulo = ainda não definido; a entrevista herda no agendamento.
+  codUsuEntrev BigInt? @map("CODUSUENTREV")
+  /// LIVRE | RESERVADO | CANCELADO.
+  status      String   @default("LIVRE") @map("STATUS")
+  dhInc       DateTime @default(now()) @map("DHINC")
+  codUsuInc   BigInt?  @map("CODUSUINC")
+
+  tenant      Tenant       @relation(fields: [codTen], references: [codTen])
+  vaga        Vaga         @relation(fields: [codVag], references: [codVag])
+  entrevistas Entrevista[]
+
+  @@index([codTen, codVag, dhInicio])
+  @@map("TREENTREVHOR")
+}
+
+/// Entrevista agendada (RN-REC-015).
+///
+/// Até aqui o pipeline tinha uma etapa "Entrevista" que não levava a lugar
+/// nenhum: a aba da vaga era só a lista de quem estava naquele estágio. Não
+/// havia horário, entrevistador, link nem confirmação.
+///
+/// Mover a candidatura para "interview" **não** cria entrevista sozinho — quem
+/// decide quando e com quem é o recrutador, e adivinhar isso encheria a agenda
+/// de compromissos que ninguém marcou.
+model Entrevista {
+  codEntrev    BigInt    @id @default(autoincrement()) @map("CODENTREV")
+  codTen       BigInt    @map("CODTEN")
+  codCdt       BigInt    @map("CODCDT")
+  /// Preenchido quando o candidato escolheu um horário da grade.
+  codHor       BigInt?   @map("CODHOR")
+  dhInicio     DateTime  @map("DHINICIO")
+  duracaoMin   Int       @default(45) @map("DURACAOMIN")
+  tipo         String    @default("VIDEO") @map("TIPO")
+  local        String?   @map("LOCAL")
+  linkReuniao  String?   @map("LINKREUNIAO") @db.Text
+  codUsuEntrev BigInt?   @map("CODUSUENTREV")
+  /// AGENDADA | REALIZADA | CANCELADA | NAO_COMPARECEU.
+  status       String    @default("AGENDADA") @map("STATUS")
+  /// Parecer do entrevistador — interno, nunca sai no portal do candidato.
+  parecer      String?   @map("PARECER") @db.Text
+  dhInc        DateTime  @default(now()) @map("DHINC")
+  codUsuInc    BigInt?   @map("CODUSUINC")
+  dhAlt        DateTime  @updatedAt @map("DHALT")
+  codUsuAlt    BigInt?   @map("CODUSUALT")
+
+  tenant      Tenant             @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura        @relation(fields: [codCdt], references: [codCdt])
+  horario     EntrevistaHorario? @relation(fields: [codHor], references: [codHor])
+  entrevistador Usuario?         @relation("EntrevistaEntrevistador", fields: [codUsuEntrev], references: [codUsu])
+
+  @@index([codTen, codCdt])
+  @@index([codTen, dhInicio])
+  @@map("TREENTREV")
 }
 
 /// Fila de e-mails (RN-SX-001).

@@ -119,9 +119,138 @@ export function PortalCandidatoSecoes({ token }: { token: string }) {
         </form>
       </section>
 
+      <EscolhaEntrevista token={token} />
       <EnvioCurriculo token={token} enviadoEm={perfil.curriculoEnviadoEm} aoEnviar={carregar} />
       <QuestionarioCultural token={token} respondido={perfil.culturaRespondida} aoConcluir={carregar} />
     </>
+  );
+}
+
+interface HorarioPortal {
+  codHor: string;
+  dhInicio: string;
+  duracaoMin: number;
+  tipo: string;
+  local: string | null;
+}
+interface EntrevistaMarcada {
+  dhInicio: string;
+  duracaoMin: number;
+  tipo: string;
+  local: string | null;
+  linkReuniao: string | null;
+}
+
+const ROTULO_TIPO_ENTREV: Record<string, string> = {
+  VIDEO: "por vídeo",
+  PRESENCIAL: "presencial",
+  TELEFONE: "por telefone",
+};
+
+const quandoLongo = (iso: string) =>
+  new Intl.DateTimeFormat("pt-BR", { dateStyle: "full", timeStyle: "short" }).format(new Date(iso));
+
+/**
+ * Escolha do horário de entrevista (RN-REC-015).
+ *
+ * Só aparece quando há horário aberto ou entrevista marcada — candidato em
+ * etapa anterior não precisa ver uma seção vazia.
+ */
+function EscolhaEntrevista({ token }: { token: string }) {
+  const [horarios, setHorarios] = useState<HorarioPortal[] | null>(null);
+  const [marcada, setMarcada] = useState<EntrevistaMarcada | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    const res = await fetch(`${BASE}/portal/candidato/${token}/entrevista`);
+    if (!res.ok) return;
+    const d = (await res.json()) as { horariosDisponiveis: HorarioPortal[]; entrevistaMarcada: EntrevistaMarcada | null };
+    setHorarios(d.horariosDisponiveis);
+    setMarcada(d.entrevistaMarcada);
+  }, [token]);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  async function escolher(codHor: string) {
+    setErro(null);
+    setEnviando(true);
+    const res = await fetch(`${BASE}/portal/candidato/${token}/entrevista`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ codHor }),
+    });
+    setEnviando(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      // Corrida por horário: a mensagem do servidor explica melhor que um
+      // genérico, porque diz o que fazer (escolher outro).
+      setErro(d?.message ?? "Não foi possível reservar este horário.");
+      await carregar();
+      return;
+    }
+    await carregar();
+  }
+
+  if (horarios === null) return null;
+  if (!marcada && horarios.length === 0) return null;
+
+  return (
+    <section style={{ ...cartao, marginTop: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 600, margin: "0 0 4px" }}>Sua entrevista</h2>
+      {marcada ? (
+        <>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 10px" }}>
+            Está confirmada. Se precisar remarcar, fale com a empresa.
+          </p>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{quandoLongo(marcada.dhInicio)}</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
+            {marcada.duracaoMin} minutos · {ROTULO_TIPO_ENTREV[marcada.tipo] ?? marcada.tipo}
+            {marcada.local ? ` · ${marcada.local}` : ""}
+          </div>
+          {marcada.linkReuniao && (
+            <p style={{ margin: "12px 0 0" }}>
+              <a href={marcada.linkReuniao} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "var(--text-link)" }}>
+                Entrar na reunião
+              </a>
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 12px" }}>
+            Escolha o horário que couber melhor na sua agenda.
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            {horarios.map((h) => (
+              <button
+                key={h.codHor}
+                onClick={() => escolher(h.codHor)}
+                disabled={enviando}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border-default)",
+                  background: "var(--surface-default)",
+                  fontFamily: "inherit",
+                  cursor: enviando ? "default" : "pointer",
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{quandoLongo(h.dhInicio)}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  {h.duracaoMin} minutos · {ROTULO_TIPO_ENTREV[h.tipo] ?? h.tipo}
+                  {h.local ? ` · ${h.local}` : ""}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <Erro mensagem={erro} />
+    </section>
   );
 }
 

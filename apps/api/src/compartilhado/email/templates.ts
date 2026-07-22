@@ -13,6 +13,10 @@ export interface DadosTemplate {
   nomeEmpresa: string;
   tituloVaga: string;
   url: string;
+  /** Só para a entrevista confirmada. */
+  dhEntrevista?: Date;
+  tipoEntrevista?: string;
+  localEntrevista?: string;
   /** Só para a assinatura: o nome do documento, que não é o título da vaga. */
   nomeDocumento?: string;
   /** Só para a avaliação comportamental: quantas perguntas e o tempo estimado. */
@@ -146,6 +150,65 @@ export const TEMPLATES: Record<string, Montador> = {
         rodape,
       ].join('\n'),
       html: envelope('Documento para assinar', paragrafos, d.url, 'Ler e assinar'),
+    };
+  },
+  /** Grade aberta: o candidato escolhe o horário que preferir. */
+  'entrevista-escolher-horario': (d) => {
+    const quantos = d.totalPerguntas ? `Há ${d.totalPerguntas} horário(s) disponível(is).` : '';
+    const paragrafos = [
+      `Olá, ${d.nomeCandidato}.`,
+      `Boa notícia: queremos conversar com você sobre a vaga <strong>${d.tituloVaga}</strong> na ${d.nomeEmpresa}.`,
+      `${quantos} Escolha no link abaixo o que melhor encaixa na sua agenda — assim ninguém precisa trocar mensagens para acertar a data.`,
+    ];
+    return {
+      assunto: `Escolha o horário da sua entrevista — ${d.tituloVaga}`,
+      texto: [
+        `Olá, ${d.nomeCandidato}.`,
+        '',
+        `Queremos conversar com você sobre a vaga ${d.tituloVaga} na ${d.nomeEmpresa}.`,
+        `${quantos} Escolha no link abaixo o horário que melhor encaixa na sua agenda.`,
+        '',
+        d.url,
+        '',
+        rodape,
+      ].join('\n'),
+      html: envelope('Escolha o horário da sua entrevista', paragrafos, d.url, 'Escolher horário'),
+    };
+  },
+
+  /** Entrevista marcada: data, formato e onde. */
+  'entrevista-confirmada': (d) => {
+    const quando = d.dhEntrevista
+      ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeStyle: 'short' }).format(d.dhEntrevista)
+      : 'a combinar';
+    const onde =
+      d.tipoEntrevista === 'PRESENCIAL'
+        ? `Presencial${d.localEntrevista ? `, em ${d.localEntrevista}` : ''}.`
+        : d.tipoEntrevista === 'TELEFONE'
+          ? 'Por telefone — vamos ligar para você.'
+          : 'Por vídeo. O link está no botão abaixo.';
+    const paragrafos = [
+      `Olá, ${d.nomeCandidato}.`,
+      `Sua entrevista para <strong>${d.tituloVaga}</strong> na ${d.nomeEmpresa} está confirmada.`,
+      `<strong>Quando:</strong> ${quando}<br><strong>Formato:</strong> ${onde}`,
+      'Se algo mudar de última hora, responda esta mensagem — conseguimos remarcar.',
+    ];
+    return {
+      assunto: `Entrevista confirmada — ${d.tituloVaga}`,
+      texto: [
+        `Olá, ${d.nomeCandidato}.`,
+        '',
+        `Sua entrevista para ${d.tituloVaga} na ${d.nomeEmpresa} está confirmada.`,
+        `Quando: ${quando}`,
+        `Formato: ${onde}`,
+        '',
+        d.url,
+        '',
+        'Se algo mudar de última hora, responda esta mensagem — conseguimos remarcar.',
+        '',
+        rodape,
+      ].join('\n'),
+      html: envelope('Entrevista confirmada', paragrafos, d.url, d.tipoEntrevista === 'VIDEO' ? 'Entrar na reunião' : 'Ver meu processo'),
     };
   },
 };

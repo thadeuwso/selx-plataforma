@@ -1089,6 +1089,97 @@ verificar(
   reconvite.json?.codConv === conviteComEmail.json?.codConv && reconvite.json?.emailEnfileirado === false,
 );
 
+// 25c. Entrevistas (RN-REC-015)
+const vagaEnt = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Entrevista" }, tokenA2);
+await http("PATCH", `/vagas/${vagaEnt.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaEnt.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtEnt1 = await http("POST", `/vagas/${vagaEnt.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Entrevistado Um", email: `ent1.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+const cdtEnt2 = await http("POST", `/vagas/${vagaEnt.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Entrevistado Dois", email: `ent2.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+
+const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+const depois = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+const abertos = await http("POST", `/vagas/${vagaEnt.json?.codVag}/entrevistas/horarios`, {
+  horarios: [
+    { dhInicio: amanha, duracaoMin: 45, tipo: "VIDEO", linkReuniao: "https://meet.exemplo/abc" },
+    { dhInicio: depois, duracaoMin: 30, tipo: "PRESENCIAL", local: "Sede — sala 2" },
+  ],
+}, tokenA2);
+verificar("abre horários na grade da vaga (2)", abertos.status === 201 && abertos.json?.abertos === 2);
+
+// Convidar exige grade: sem horário livre, o convite não faz sentido.
+const conviteSemGrade = await http("POST", `/candidaturas/${cdtComp.json?.codCdt}/entrevistas/convite`, {}, tokenA2);
+verificar("convidar sem horário livre é recusado → 400", conviteSemGrade.status === 400);
+
+const conviteEnt = await http("POST", `/candidaturas/${cdtEnt1.json?.codCdt}/entrevistas/convite`, {}, tokenA2);
+verificar(
+  "convida o candidato a escolher horário e enfileira o e-mail",
+  conviteEnt.status === 201 && conviteEnt.json?.horariosLivres === 2 && conviteEnt.json?.emailEnfileirado === true,
+);
+
+const tk1 = (await http("POST", `/candidaturas/${cdtEnt1.json?.codCdt}/link-acompanhamento`, {}, tokenA2)).json?.tokenPub;
+const tk2 = (await http("POST", `/candidaturas/${cdtEnt2.json?.codCdt}/link-acompanhamento`, {}, tokenA2)).json?.tokenPub;
+const opcoes = await http("GET", `/portal/candidato/${tk1}/entrevista`);
+verificar("candidato vê os horários disponíveis pelo portal", opcoes.json?.horariosDisponiveis?.length === 2);
+verificar(
+  "portal não expõe o parecer interno do entrevistador",
+  !JSON.stringify(opcoes.json).includes("parecer"),
+);
+
+const escolhido = opcoes.json.horariosDisponiveis[0].codHor;
+const escolha1 = await http("POST", `/portal/candidato/${tk1}/entrevista`, { codHor: escolhido });
+verificar("candidato reserva o horário e a entrevista é criada", escolha1.status === 201 && !!escolha1.json?.codEntrev);
+
+// O ponto delicado: dois candidatos no mesmo horário não podem gerar agenda dupla.
+const escolha2 = await http("POST", `/portal/candidato/${tk2}/entrevista`, { codHor: escolhido });
+verificar(
+  "segundo candidato no mesmo horário é recusado (sem agenda dupla)",
+  escolha2.status === 400,
+);
+verificar(
+  "horário reservado sai da lista oferecida ao próximo candidato",
+  (await http("GET", `/portal/candidato/${tk2}/entrevista`)).json?.horariosDisponiveis?.length === 1,
+);
+verificar(
+  "candidato com entrevista marcada não marca outra",
+  (await http("POST", `/portal/candidato/${tk1}/entrevista`, { codHor: opcoes.json.horariosDisponiveis[1].codHor })).status === 400,
+);
+
+const agenda = await http("GET", `/vagas/${vagaEnt.json?.codVag}/entrevistas`, null, tokenA2);
+verificar(
+  "agenda da vaga mostra a entrevista marcada e o horário que sobrou",
+  agenda.json?.entrevistas?.length === 1 && agenda.json?.horariosLivres?.length === 1,
+);
+// Marcar entrevista move a etapa; o contrário seria adivinhar quando e com quem.
+verificar(
+  "candidatura que escolheu horário aparece na agenda com os dados do candidato",
+  agenda.json.entrevistas[0].candidatura?.candidato?.nomeCand === "Entrevistado Um",
+);
+
+const direta = await http("POST", `/candidaturas/${cdtEnt2.json?.codCdt}/entrevistas`, {
+  dhInicio: depois, tipo: "TELEFONE",
+}, tokenA2);
+verificar("recrutador agenda direto, sem grade", direta.status === 201 && !!direta.json?.codEntrev);
+verificar(
+  "agendar direto move a candidatura para a etapa de entrevista",
+  (await http("GET", `/candidaturas/${cdtEnt2.json?.codCdt}`, null, tokenA2)).json?.estagio === "interview",
+);
+
+const cancelada = await http("PATCH", `/entrevistas/${escolha1.json?.codEntrev}`, { status: "CANCELADA" }, tokenA2);
+verificar("cancelar entrevista devolve o horário para a grade", cancelada.status === 200);
+verificar(
+  "horário cancelado volta a ser oferecido",
+  (await http("GET", `/vagas/${vagaEnt.json?.codVag}/entrevistas`, null, tokenA2)).json?.horariosLivres?.length === 2,
+);
+
+verificar(
+  "tenant B não enxerga a agenda da vaga do tenant A",
+  (await http("GET", `/vagas/${vagaEnt.json?.codVag}/entrevistas`, null, tokenB)).json?.entrevistas?.length === 0,
+);
+
 // 26a. Cultura da empresa e questionário cultural do candidato (RN-REC-014)
 const culturaAntes = await http("GET", "/configuracoes/cultura", null, tokenA2);
 verificar("cultura da empresa começa indefinida", culturaAntes.status === 200 && culturaAntes.json?.definida === false);

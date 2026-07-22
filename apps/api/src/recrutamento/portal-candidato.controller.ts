@@ -153,6 +153,88 @@ export class PortalCandidatoController {
     return { ok: true, statusExtracao: extraido.status };
   }
 
+  /** Horários disponíveis para a entrevista, e o que o candidato já escolheu. */
+  @Publico()
+  @Get(':token/entrevista')
+  async consultarEntrevista(@Param('token') token: string) {
+    const cdt = await this.candidaturaPorToken(token);
+    const candidatura = await this.prisma.admin.candidatura.findUnique({
+      where: { codCdt: cdt.codCdt },
+      select: { codVag: true },
+    });
+    const [horarios, marcada] = await Promise.all([
+      this.prisma.admin.entrevistaHorario.findMany({
+        where: { codVag: candidatura!.codVag, status: 'LIVRE', dhInicio: { gte: new Date() } },
+        orderBy: { dhInicio: 'asc' },
+        select: { codHor: true, dhInicio: true, duracaoMin: true, tipo: true, local: true },
+      }),
+      this.prisma.admin.entrevista.findFirst({
+        where: { codCdt: cdt.codCdt, status: 'AGENDADA' },
+        orderBy: { codEntrev: 'desc' },
+        // `parecer` fica de fora: é anotação interna do entrevistador.
+        select: { dhInicio: true, duracaoMin: true, tipo: true, local: true, linkReuniao: true },
+      }),
+    ]);
+    return { horariosDisponiveis: horarios, entrevistaMarcada: marcada };
+  }
+
+  /**
+   * O candidato reserva um horário.
+   *
+   * A reserva é uma atualização condicional (`LIVRE` → `RESERVADO`) e a
+   * entrevista só é criada se ela pegou. Dois candidatos clicando no mesmo
+   * horário ao mesmo tempo: o segundo recebe recusa, não uma agenda dupla.
+   */
+  @Publico()
+  @Post(':token/entrevista')
+  async escolherHorario(@Param('token') token: string, @Body() corpo: unknown) {
+    const dados = validar(z.object({ codHor: z.coerce.bigint() }), corpo);
+    const cdt = await this.candidaturaPorToken(token);
+
+    const jaTem = await this.prisma.admin.entrevista.findFirst({
+      where: { codCdt: cdt.codCdt, status: 'AGENDADA' },
+    });
+    if (jaTem) throw new BadRequestException('Você já tem uma entrevista marcada para esta vaga');
+
+    const horario = await this.prisma.admin.entrevistaHorario.findUnique({ where: { codHor: dados.codHor } });
+    if (!horario || horario.codTen !== cdt.codTen) throw new BadRequestException('Horário indisponível');
+
+    const reservou = await this.prisma.admin.entrevistaHorario.updateMany({
+      where: { codHor: dados.codHor, status: 'LIVRE' },
+      data: { status: 'RESERVADO' },
+    });
+    if (reservou.count === 0) {
+      throw new BadRequestException('Este horário acabou de ser reservado por outra pessoa. Escolha outro.');
+    }
+
+    const entrevista = await this.prisma.admin.entrevista.create({
+      data: {
+        codTen: cdt.codTen,
+        codCdt: cdt.codCdt,
+        codHor: horario.codHor,
+        dhInicio: horario.dhInicio,
+        duracaoMin: horario.duracaoMin,
+        tipo: horario.tipo,
+        local: horario.local,
+        linkReuniao: horario.linkReuniao,
+        codUsuEntrev: horario.codUsuEntrev,
+      },
+      select: { codEntrev: true, dhInicio: true, tipo: true, local: true, linkReuniao: true },
+    });
+
+    await this.prisma.admin.candidaturaHistorico.create({
+      data: {
+        codTen: cdt.codTen,
+        codCdt: cdt.codCdt,
+        tipoEvento: 'entrevista_agendada',
+        rotuloPub: 'Entrevista agendada',
+        tipoAtor: 'candidato',
+        metadadosJson: { codEntrev: entrevista.codEntrev.toString() },
+      },
+    });
+    return entrevista;
+  }
+
   /** Questionário cultural: afirmações do catálogo + o que já foi respondido. */
   @Publico()
   @Get(':token/cultura')
