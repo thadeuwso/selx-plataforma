@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, fetchAutenticado } from "@/lib/api";
-import { Abas, Gaveta } from "./formulario";
+import { Abas, BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "./formulario";
 import { AnaliseIaCandidato } from "@/componentes/analise-ia-candidato";
 import { PerfilComportamentalVisao } from "@/componentes/perfil-comportamental-visao";
 import { ResumoCandidatura, type SituacaoCandidatura } from "@/componentes/resumo-candidatura";
@@ -163,6 +163,58 @@ export function CandidatoDrawer({
   const [novaNota, setNovaNota] = useState("");
   const [salvandoNota, setSalvandoNota] = useState(false);
   const [mudandoEstagio, setMudandoEstagio] = useState(false);
+  const [entrevistaAberta, setEntrevistaAberta] = useState(false);
+  const [formEntrev, setFormEntrev] = useState({ data: "", hora: "", duracaoMin: "45", tipo: "VIDEO", local: "", linkReuniao: "" });
+  const [salvandoEntrev, setSalvandoEntrev] = useState(false);
+  const [erroEntrev, setErroEntrev] = useState<string | null>(null);
+
+  /** Marca a entrevista direto — quem já sabe o horário não precisa da grade. */
+  async function agendarEntrevista(e: React.FormEvent) {
+    e.preventDefault();
+    if (!codCdt) return;
+    setErroEntrev(null);
+    if (!formEntrev.data || !formEntrev.hora) {
+      setErroEntrev("Informe data e hora.");
+      return;
+    }
+    setSalvandoEntrev(true);
+    const r = await api(`/candidaturas/${codCdt}/entrevistas`, {
+      metodo: "POST",
+      corpo: {
+        dhInicio: new Date(`${formEntrev.data}T${formEntrev.hora}`).toISOString(),
+        duracaoMin: Number(formEntrev.duracaoMin),
+        tipo: formEntrev.tipo,
+        local: formEntrev.local || undefined,
+        linkReuniao: formEntrev.linkReuniao || undefined,
+      },
+    });
+    setSalvandoEntrev(false);
+    if (r.status !== 201) {
+      setErroEntrev("Não foi possível marcar a entrevista.");
+      return;
+    }
+    setEntrevistaAberta(false);
+    await carregarDetalhe();
+    aoAtualizar();
+  }
+
+  /**
+   * Convida o candidato a escolher um horário da grade da vaga. Sem isso, a
+   * grade fica dependendo de o candidato abrir o portal por conta própria.
+   */
+  async function convidarParaEscolher() {
+    if (!codCdt) return;
+    setErroEntrev(null);
+    setSalvandoEntrev(true);
+    const r = await api<{ horariosLivres: number }>(`/candidaturas/${codCdt}/entrevistas/convite`, { metodo: "POST" });
+    setSalvandoEntrev(false);
+    if (r.status !== 201) {
+      setErroEntrev("Não há horários abertos nesta vaga. Abra a grade na aba Entrevistas da vaga.");
+      return;
+    }
+    setEntrevistaAberta(false);
+    alert(`Convite enviado. O candidato pode escolher entre ${r.json?.horariosLivres} horário(s).`);
+  }
 
   const carregarDetalhe = useCallback(async () => {
     if (!codCdt) return;
@@ -323,7 +375,6 @@ export function CandidatoDrawer({
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {[
               { estagio: "screening", rotulo: "Avançar p/ Triagem" },
-              { estagio: "interview", rotulo: "Marcar entrevista" },
               { estagio: "not_selected", rotulo: "Reprovar" },
             ].filter((a) => a.estagio !== detalhe.estagio).map((a) => (
               <button
@@ -335,6 +386,15 @@ export function CandidatoDrawer({
                 {a.rotulo}
               </button>
             ))}
+            {/* Marcar entrevista abre o agendamento de verdade. Antes este
+                botão só mudava a etapa, prometendo algo que não fazia. */}
+            <button
+              onClick={() => setEntrevistaAberta(true)}
+              disabled={mudandoEstagio}
+              style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Marcar entrevista
+            </button>
           </div>
 
           <Abas
@@ -536,6 +596,59 @@ export function CandidatoDrawer({
           )}
         </div>
       )}
+
+      <Gaveta titulo="Marcar entrevista" aberta={entrevistaAberta} fechar={() => setEntrevistaAberta(false)} largura={520}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.55 }}>
+          Marque o horário aqui, ou convide o candidato a escolher entre os horários que a vaga tem
+          abertos — nesse caso ele recebe um e-mail e escolhe pelo portal.
+        </p>
+        <form onSubmit={agendarEntrevista} style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Campo rotulo="Data">
+              <Entrada type="date" value={formEntrev.data} onChange={(e) => setFormEntrev({ ...formEntrev, data: e.target.value })} />
+            </Campo>
+            <Campo rotulo="Hora">
+              <Entrada type="time" value={formEntrev.hora} onChange={(e) => setFormEntrev({ ...formEntrev, hora: e.target.value })} />
+            </Campo>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Campo rotulo="Duração (min)">
+              <Entrada type="number" min={5} max={480} value={formEntrev.duracaoMin} onChange={(e) => setFormEntrev({ ...formEntrev, duracaoMin: e.target.value })} />
+            </Campo>
+            <Campo rotulo="Formato">
+              <Selecao value={formEntrev.tipo} onChange={(e) => setFormEntrev({ ...formEntrev, tipo: e.target.value })}>
+                <option value="VIDEO">Vídeo</option>
+                <option value="PRESENCIAL">Presencial</option>
+                <option value="TELEFONE">Telefone</option>
+              </Selecao>
+            </Campo>
+          </div>
+          {formEntrev.tipo === "PRESENCIAL" && (
+            <Campo rotulo="Local">
+              <Entrada value={formEntrev.local} onChange={(e) => setFormEntrev({ ...formEntrev, local: e.target.value })} />
+            </Campo>
+          )}
+          {formEntrev.tipo === "VIDEO" && (
+            <Campo rotulo="Link da reunião">
+              <Entrada placeholder="https://…" value={formEntrev.linkReuniao} onChange={(e) => setFormEntrev({ ...formEntrev, linkReuniao: e.target.value })} />
+            </Campo>
+          )}
+          <Erro mensagem={erroEntrev} />
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <BotaoPrimario type="submit" disabled={salvandoEntrev}>
+              {salvandoEntrev ? "Marcando…" : "Marcar e avisar o candidato"}
+            </BotaoPrimario>
+            <button
+              type="button"
+              onClick={convidarParaEscolher}
+              disabled={salvandoEntrev}
+              style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Deixar o candidato escolher
+            </button>
+          </div>
+        </form>
+      </Gaveta>
     </Gaveta>
   );
 }

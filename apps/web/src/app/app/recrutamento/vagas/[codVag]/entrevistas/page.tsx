@@ -128,7 +128,7 @@ export default function EntrevistasVaga() {
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16 }}>
         <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0, maxWidth: 640, lineHeight: 1.55 }}>
           Abra horários e o candidato escolhe o que couber na agenda dele, pelo portal — sem a troca
-          de mensagens para acertar data. Você também pode marcar direto, pelo painel do candidato.
+          de mensagens para acertar data. Para marcar um horário específico, use "Marcar entrevista" no painel do candidato.
         </p>
         <BotaoPrimario onClick={() => setAberta(true)} style={{ flexShrink: 0 }}>Abrir horários</BotaoPrimario>
       </header>

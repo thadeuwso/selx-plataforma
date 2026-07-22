@@ -57,9 +57,58 @@ export function TabelaCandidatos({
   const [busca, setBusca] = useState("");
   const [buscaAtiva, setBuscaAtiva] = useState("");
   const [aderenciaMin, setAderenciaMin] = useState("");
+  // RN-REC-017: etiquetar e favoritar só servem para alguma coisa se dá para
+  // filtrar pela marca depois.
+  const [tagFiltro, setTagFiltro] = useState("");
+  const [soFavoritos, setSoFavoritos] = useState(false);
+  const [etiquetas, setEtiquetas] = useState<{ codTag: string; nome: string }[]>([]);
+  const [salvos, setSalvos] = useState<{ codFiltro: string; nome: string; filtrosJson: Record<string, string> }[]>([]);
   const [densidade, setDensidade] = useState<"confortavel" | "compacta">("confortavel");
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
+
+  const carregarAuxiliares = useCallback(async () => {
+    const [t, f] = await Promise.all([
+      api<{ codTag: string; nome: string }[]>("/tags"),
+      api<{ codFiltro: string; nome: string; filtrosJson: Record<string, string> }[]>("/filtros-salvos"),
+    ]);
+    if (t.status === 200 && t.json) setEtiquetas(t.json);
+    if (f.status === 200 && f.json) setSalvos(f.json);
+  }, []);
+
+  useEffect(() => {
+    void carregarAuxiliares();
+  }, [carregarAuxiliares]);
+
+  /** Aplica um recorte salvo, substituindo os filtros atuais. */
+  function aplicarSalvo(filtros: Record<string, string>) {
+    setEstagioFiltro(filtros.estagio ?? "");
+    setAderenciaMin(filtros.aderenciaMin ?? "");
+    setTagFiltro(filtros.tags ?? "");
+    setSoFavoritos(filtros.favoritos === "S");
+    setOrdenar(filtros.ordenar ?? "prioridade");
+  }
+
+  async function salvarRecorteAtual() {
+    const nome = prompt("Nome deste recorte:");
+    if (!nome?.trim()) return;
+    const filtros: Record<string, string> = { ordenar };
+    if (estagioFiltro) filtros.estagio = estagioFiltro;
+    if (aderenciaMin) filtros.aderenciaMin = aderenciaMin;
+    if (tagFiltro) filtros.tags = tagFiltro;
+    if (soFavoritos) filtros.favoritos = "S";
+    const r = await api("/filtros-salvos", { metodo: "POST", corpo: { nome: nome.trim(), filtros } });
+    if (r.status !== 201) {
+      alert("Não foi possível salvar o recorte.");
+      return;
+    }
+    await carregarAuxiliares();
+  }
+
+  async function removerSalvo(codFiltro: string) {
+    await api(`/filtros-salvos/${codFiltro}`, { metodo: "DELETE" });
+    await carregarAuxiliares();
+  }
 
   const ehFavorito = (c: Candidatura) => (c.favoritas?.length ?? 0) > 0;
 
@@ -79,6 +128,8 @@ export function TabelaCandidatos({
     if (estagioFiltro) params.set("estagio", estagioFiltro);
     if (buscaAtiva) params.set("busca", buscaAtiva);
     if (aderenciaMin) params.set("aderenciaMin", aderenciaMin);
+    if (tagFiltro) params.set("tags", tagFiltro);
+    if (soFavoritos) params.set("favoritos", "S");
     const r = await api<ListaPaginada>(`/vagas/${codVag}/candidaturas?${params.toString()}`);
     setCarregando(false);
     if (r.status !== 200 || !r.json) {
@@ -88,7 +139,7 @@ export function TabelaCandidatos({
     setItens(r.json.itens);
     setTotal(r.json.total);
     onCarregou(r.json.itens);
-  }, [codVag, pagina, tamanhoPagina, ordenar, estagioFiltro, buscaAtiva, aderenciaMin, onCarregou]);
+  }, [codVag, pagina, tamanhoPagina, ordenar, estagioFiltro, buscaAtiva, aderenciaMin, tagFiltro, soFavoritos, onCarregou]);
 
   useEffect(() => {
     void carregar();
@@ -96,7 +147,7 @@ export function TabelaCandidatos({
 
   useEffect(() => {
     setPagina(1);
-  }, [ordenar, estagioFiltro, buscaAtiva, aderenciaMin]);
+  }, [ordenar, estagioFiltro, buscaAtiva, aderenciaMin, tagFiltro, soFavoritos]);
 
   const totalPaginas = Math.max(1, Math.ceil(total / tamanhoPagina));
   const padCel = densidade === "compacta" ? "6px 10px" : "10px 12px";
@@ -132,11 +183,56 @@ export function TabelaCandidatos({
           <option value="75">Alta (≥75)</option>
           <option value="50">Média (≥50)</option>
         </select>
+        <select value={tagFiltro} onChange={(e) => setTagFiltro(e.target.value)} style={estiloSelect}>
+          <option value="">Todas as etiquetas</option>
+          {etiquetas.map((t) => <option key={t.codTag} value={t.codTag}>{t.nome}</option>)}
+        </select>
+        <button
+          onClick={() => setSoFavoritos((v) => !v)}
+          title="Mostrar só os meus favoritos"
+          style={{
+            ...estiloSelect,
+            cursor: "pointer",
+            color: soFavoritos ? "var(--amber-700, #714E08)" : "var(--text-body)",
+            fontWeight: soFavoritos ? 600 : 400,
+          }}
+        >
+          {soFavoritos ? "★ Só favoritos" : "☆ Só favoritos"}
+        </button>
         <button
           onClick={() => setDensidade((d) => (d === "confortavel" ? "compacta" : "confortavel"))}
           style={{ ...estiloSelect, cursor: "pointer", marginLeft: "auto" }}
         >
           {densidade === "confortavel" ? "Densidade compacta" : "Densidade confortável"}
+        </button>
+      </div>
+
+      {/* Recortes salvos — por usuário, como o favorito. */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10, fontSize: 12 }}>
+        <span style={{ color: "var(--text-muted)" }}>Meus recortes:</span>
+        {salvos.map((f) => (
+          <span key={f.codFiltro} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid var(--border-default)", borderRadius: 999, padding: "2px 4px 2px 10px" }}>
+            <button
+              onClick={() => aplicarSalvo(f.filtrosJson)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--text-body)", padding: 0 }}
+            >
+              {f.nome}
+            </button>
+            <button
+              onClick={() => removerSalvo(f.codFiltro)}
+              title="Remover recorte"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 13, lineHeight: 1, padding: "0 4px" }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {salvos.length === 0 && <span style={{ color: "var(--text-muted)" }}>nenhum ainda</span>}
+        <button
+          onClick={salvarRecorteAtual}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-link)", fontFamily: "inherit", fontSize: 12 }}
+        >
+          salvar o recorte atual
         </button>
       </div>
 
