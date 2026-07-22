@@ -13,6 +13,7 @@ import {
   type AutoavaliacaoResp,
   type PerfilCultural,
 } from './calcular-match';
+import { montarEvidencias } from './analise-candidato';
 
 export const ESTAGIOS = [
   'applied', 'screening', 'analysis', 'knockout', 'shortlist', 'interview',
@@ -627,7 +628,9 @@ export class CandidatosController {
       const cdt = await tx.candidatura.findFirst({
         where: { codCdt: BigInt(codCdt), ativo: 'S' },
         include: {
-          candidato: true,
+          candidato: {
+            include: { curriculos: { orderBy: { codCandCv: 'desc' }, take: 1, select: { textoExtraido: true, dhInc: true } } },
+          },
           canal: { select: { nomeCanal: true } },
           vaga: { select: { codVag: true, titulo: true, perfilCulturalIdealJson: true, requisitos: true } },
           match: true,
@@ -636,10 +639,56 @@ export class CandidatosController {
       });
       if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
 
+      // Situação consolidada: o Resumo precisa responder "em que pé está isto"
+      // sem obrigar o recrutador a abrir quatro abas para descobrir.
+      const [convite, analise, ultimaMudanca] = await Promise.all([
+        tx.conviteComportamental.findFirst({
+          where: { codCdt: cdt.codCdt },
+          orderBy: { codConv: 'desc' },
+          select: { status: true, sessao: { select: { dhConclusao: true, resultado: { select: { codResult: true } } } } },
+        }),
+        tx.iAAnaliseCandidatura.findFirst({
+          where: { codCdt: cdt.codCdt, status: 'OK' },
+          orderBy: { codIaAnalise: 'desc' },
+          select: { dhInc: true },
+        }),
+        tx.candidaturaHistorico.findFirst({
+          where: { codCdt: cdt.codCdt, tipoEvento: 'mudanca_estagio' },
+          orderBy: { codCdtHis: 'desc' },
+          select: { dhInc: true },
+        }),
+      ]);
+
+      const curriculo = cdt.candidato.curriculos[0] ?? null;
+      const desde = ultimaMudanca?.dhInc ?? cdt.dhInc;
+      const situacao = {
+        diasNaEtapa: Math.floor((Date.now() - desde.getTime()) / (24 * 60 * 60 * 1000)),
+        dhNaEtapaDesde: desde,
+        curriculo: curriculo ? { dhInc: curriculo.dhInc, temTexto: !!curriculo.textoExtraido } : null,
+        comportamental: convite
+          ? {
+              status: convite.status,
+              concluida: !!convite.sessao?.resultado,
+              dhConclusao: convite.sessao?.dhConclusao ?? null,
+            }
+          : null,
+        analise: analise ? { dhInc: analise.dhInc } : null,
+      };
+
       const autoavaliacoes = (cdt.autoavaliacaoJson as Record<string, AutoavaliacaoResp> | null) ?? {};
-      const requisitosAvaliados = cdt.vaga.requisitos.map((r) => {
+
+      // Mesma função que monta o dossiê da IA (RN-REC-013): aqui ela serve o
+      // Resumo sem IA nenhuma — é busca de texto no currículo, determinística e
+      // conferível pelo recrutador.
+      const evidencias = montarEvidencias(
+        cdt.vaga.requisitos.map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq })),
+        curriculo?.textoExtraido ?? null,
+      );
+      const requisitosAvaliados = cdt.vaga.requisitos.map((r, i) => {
         const resp = autoavaliacoes[r.codVagReq.toString()];
         return {
+          // Onde o currículo sustenta (ou não) este requisito.
+          evidenciaCurriculo: evidencias[i]?.trecho ?? null,
           codVagReq: r.codVagReq,
           descrReq: r.descrReq,
           tipoReq: r.tipoReq,
@@ -665,7 +714,7 @@ export class CandidatosController {
         };
       });
 
-      return { ...cdt, requisitosAvaliados };
+      return { ...cdt, requisitosAvaliados, situacao };
     });
   }
 

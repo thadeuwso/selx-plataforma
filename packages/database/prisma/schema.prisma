@@ -72,7 +72,6 @@ model Tenant {
   resultadosComportamentaisFatores ResultadoComportamentalFator[]
   aderenciasComportamentaisVaga AderenciaComportamentalVaga[]
   aderenciasComportamentaisVagaFatores AderenciaComportamentalVagaFator[]
-  iaResumosComportamentais IAResumoComportamental[]
   perfisComportamentaisPadrao PerfilComportamentalPadrao[]
   perfisComportamentaisPadraoFatores PerfilComportamentalPadraoFator[]
 
@@ -1068,7 +1067,6 @@ model ResultadoComportamental {
   sessao     SessaoComportamental            @relation(fields: [codSes], references: [codSes])
   fatores    ResultadoComportamentalFator[]
   aderencias AderenciaComportamentalVaga[]
-  iaResumos  IAResumoComportamental[]
 
   @@map("TGPRESULT")
 }
@@ -1130,27 +1128,6 @@ model AderenciaComportamentalVagaFator {
 
   @@unique([codAderVag, codFat])
   @@map("TGPADERVAGFAT")
-}
-
-/// Saída de IA (resumo executivo / perguntas de entrevista) — só explica
-/// resultado já calculado (RN-GP-006). Construída na última fase do módulo.
-model IAResumoComportamental {
-  codIaResumo  BigInt   @id @default(autoincrement()) @map("CODIARESUMO")
-  codTen       BigInt   @map("CODTEN")
-  codResult    BigInt   @map("CODRESULT")
-  tipo         String   @map("TIPO")
-  conteudoJson Json     @map("CONTEUDOJSON")
-  modeloUsado  String?  @map("MODELOUSADO")
-  versaoPrompt String?  @map("VERSAOPROMPT")
-  duracaoMs    Int?     @map("DURACAOMS")
-  status       String   @default("OK") @map("STATUS")
-  tentativas   Int      @default(1) @map("TENTATIVAS")
-  dhInc        DateTime @default(now()) @map("DHINC")
-
-  tenant    Tenant                  @relation(fields: [codTen], references: [codTen])
-  resultado ResultadoComportamental @relation(fields: [codResult], references: [codResult])
-
-  @@map("TGPIARESUMO")
 }
 
 // ===== Assinatura eletrônica de documentos (Core — TSX, exclusivo do SelexOps) =====

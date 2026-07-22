@@ -26,8 +26,6 @@ router = APIRouter(prefix="/v1/ia")
 PURPOSES_REGISTRADOS = {
     "plataforma.diagnostico@v1",
     "recrutamento.estruturar-vaga@v1",
-    "comportamental.resumo@v1",
-    "comportamental.perguntas-entrevista@v1",
     "recrutamento.analise-candidato@v1",
 }
 

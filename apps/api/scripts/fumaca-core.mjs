@@ -762,6 +762,24 @@ verificar(
   "quebra por requisito calculada ao vivo (candidata forte pontua alto no obrigatório)",
   reqAvaliadoObrigatorio?.scorePct >= 90 && reqAvaliadoObrigatorio?.nivelInformado === 4,
 );
+// O Resumo responde "em que pé está isto" sem obrigar a abrir as outras abas.
+verificar(
+  "detalhe traz situação consolidada (dias na etapa, currículo, avaliação, dossiê)",
+  detalheCdtForte.json?.situacao != null &&
+    typeof detalheCdtForte.json.situacao.diasNaEtapa === "number" &&
+    "curriculo" in detalheCdtForte.json.situacao &&
+    "comportamental" in detalheCdtForte.json.situacao &&
+    "analise" in detalheCdtForte.json.situacao,
+);
+// Mesma função de evidência que monta o dossiê da IA, aqui servindo uma tela
+// determinística. Esta candidata não tem currículo anexado: o campo tem de vir
+// null em todos os requisitos — evidência nunca é inventada.
+verificar(
+  "cada requisito traz o trecho do currículo que o sustenta (null quando não há currículo)",
+  detalheCdtForte.json?.requisitosAvaliados?.every((r) => "evidenciaCurriculo" in r) &&
+    detalheCdtForte.json.requisitosAvaliados.every((r) => r.evidenciaCurriculo === null),
+);
+
 const detalheCdtForteB = await http("GET", `/candidaturas/${cdtForte.json?.codCdt}`, null, tokenB);
 verificar("tenant B não vê detalhe de candidatura do tenant A → 400", detalheCdtForteB.status === 400);
 

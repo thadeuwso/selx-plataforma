@@ -38,7 +38,6 @@ export interface DetalheComportamental {
         aderenciaGeral: number;
         fatores: { fator: { sigla: string; nome: string }; distanciaFaixa: number; aderenciaDimensao: number; dentroDaFaixa: string }[];
       }[];
-      iaResumos: { tipo: string; conteudoJson: unknown }[];
     } | null;
   } | null;
   aderenciaPadrao: {

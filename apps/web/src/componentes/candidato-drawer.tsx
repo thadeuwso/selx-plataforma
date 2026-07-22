@@ -6,15 +6,7 @@ import { api, fetchAutenticado } from "@/lib/api";
 import { Abas, Gaveta } from "./formulario";
 import { AnaliseIaCandidato } from "@/componentes/analise-ia-candidato";
 import { PerfilComportamentalVisao } from "@/componentes/perfil-comportamental-visao";
-
-const DIMENSOES_CULTURA = [
-  { chave: "autonomy", rotulo: "Autonomia" },
-  { chave: "pace", rotulo: "Ritmo" },
-  { chave: "collaboration", rotulo: "Colaboração" },
-  { chave: "structure", rotulo: "Estrutura" },
-  { chave: "dataDriven", rotulo: "Orientação a dados" },
-  { chave: "directCommunication", rotulo: "Comunicação direta" },
-] as const;
+import { ResumoCandidatura, type SituacaoCandidatura } from "@/componentes/resumo-candidatura";
 
 const ROTULO_STATUS_ADMISSAO: Record<string, string> = {
   AGUARDANDO_CANDIDATO: "Aguardando candidato",
@@ -52,6 +44,7 @@ interface DetalheCandidatura {
     qtdGapsCrit: number;
   } | null;
   processoAdmissao: { status: string } | null;
+  situacao: SituacaoCandidatura | null;
   requisitosAvaliados: {
     codVagReq: string;
     descrReq: string;
@@ -60,6 +53,7 @@ interface DetalheCandidatura {
     nivelInformado: number | null;
     tempoInformado: number | null;
     evidenciaTexto: string | null;
+    evidenciaCurriculo: string | null;
   }[];
 }
 
@@ -91,7 +85,6 @@ interface DetalheComportamental {
         aderenciaGeral: number;
         fatores: { fator: { sigla: string; nome: string }; distanciaFaixa: number; aderenciaDimensao: number; dentroDaFaixa: string }[];
       }[];
-      iaResumos: { tipo: string; conteudoJson: unknown }[];
     } | null;
   } | null;
   aderenciaPadrao: {
@@ -356,16 +349,6 @@ export function CandidatoDrawer({
 
           {tab === "perfil" && (
             <div style={{ display: "grid", gap: 16 }}>
-              {!detalhe.knockoutJson &&
-                !detalhe.match &&
-                detalhe.requisitosAvaliados.length === 0 &&
-                !detalhe.vaga.perfilCulturalIdealJson &&
-                !detalhe.candidato.perfilCulturalJson &&
-                detalhe.estagio !== "hired" && (
-                  <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                    Sem dados de match ou perfil cultural — esta vaga não tem requisitos configurados.
-                  </p>
-                )}
               {detalhe.knockoutJson && (
                 <div
                   style={{
@@ -380,83 +363,15 @@ export function CandidatoDrawer({
                 </div>
               )}
 
-              {detalhe.match && (
-                <div>
-                  <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Score geral</div>
-                      <div style={{ fontSize: 22, fontWeight: 700 }}>{detalhe.match.scoreGeral}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Contratação</div>
-                      <div style={{ fontSize: 22, fontWeight: 700 }}>{detalhe.match.scoreContratacao}</div>
-                    </div>
-                    {detalhe.match.scoreCultura != null && (
-                      <div>
-                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Fit cultural</div>
-                        <div style={{ fontSize: 22, fontWeight: 700 }}>{detalhe.match.scoreCultura}</div>
-                      </div>
-                    )}
-                  </div>
-                  {detalhe.match.driverPrincipal && (
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Ponto forte: {detalhe.match.driverPrincipal}</div>
-                  )}
-                  {detalhe.match.qtdGapsCrit > 0 && (
-                    <div style={{ fontSize: 12, color: "var(--red-600, #9A3833)" }}>{detalhe.match.qtdGapsCrit} gap(s) crítico(s)</div>
-                  )}
-                </div>
-              )}
-
-              {detalhe.requisitosAvaliados.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Requisitos</div>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {detalhe.requisitosAvaliados.map((r) => (
-                      <div key={r.codVagReq}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                          <span>
-                            {r.descrReq}
-                            {r.tipoReq === "OBRIGATORIO" && <span style={{ color: "var(--text-muted)" }}> (obrigatório)</span>}
-                          </span>
-                          <span style={{ color: "var(--text-muted)" }}>{r.scorePct}%</span>
-                        </div>
-                        <div style={{ height: 5, background: "var(--border-default)", borderRadius: 999, overflow: "hidden" }}>
-                          <div
-                            style={{
-                              height: "100%",
-                              width: `${r.scorePct}%`,
-                              background: r.scorePct >= 75 ? "var(--green-600, #2C7A4B)" : r.scorePct >= 50 ? "var(--amber-600, #96690C)" : "var(--red-600, #9A3833)",
-                            }}
-                          />
-                        </div>
-                        {r.evidenciaTexto && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{r.evidenciaTexto}</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(detalhe.vaga.perfilCulturalIdealJson || detalhe.candidato.perfilCulturalJson) && (
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Perfil cultural — ideal da vaga × candidato</div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {DIMENSOES_CULTURA.map((d) => {
-                      const ideal = detalhe.vaga.perfilCulturalIdealJson?.[d.chave];
-                      const cand = detalhe.candidato.perfilCulturalJson?.[d.chave];
-                      if (ideal == null && cand == null) return null;
-                      return (
-                        <div key={d.chave} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                          <span style={{ color: "var(--text-muted)" }}>{d.rotulo}</span>
-                          <span>
-                            {ideal ?? "—"} <span style={{ color: "var(--text-muted)" }}>ideal</span> · {cand ?? "—"}{" "}
-                            <span style={{ color: "var(--text-muted)" }}>candidato</span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <ResumoCandidatura
+                estagio={detalhe.estagio}
+                situacao={detalhe.situacao ?? null}
+                match={detalhe.match}
+                requisitos={detalhe.requisitosAvaliados}
+                perfilCandidato={detalhe.candidato.perfilCulturalJson}
+                perfilIdeal={detalhe.vaga.perfilCulturalIdealJson}
+                aoIrParaDossie={() => setTab("dossie")}
+              />
 
               {detalhe.estagio === "hired" && (
                 <div>

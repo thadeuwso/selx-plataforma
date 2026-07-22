@@ -77,7 +77,6 @@ export class AvaliacaoComportamentalController {
                 include: {
                   fatores: { include: { fator: true } },
                   aderencias: { include: { fatores: { include: { fator: true } } } },
-                  iaResumos: { where: { status: 'OK' }, orderBy: { codIaResumo: 'desc' } },
                 },
               },
             },
