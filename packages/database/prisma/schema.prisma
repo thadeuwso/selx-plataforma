@@ -54,6 +54,8 @@ model Tenant {
   cdtHistoricos  CandidaturaHistorico[]
   estagioConfigs EstagioConfig[]
   matchResumos   MatchResumo[]
+  iaAnalises     IAAnaliseCandidatura[]
+  configIa       ConfiguracaoIa?
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
   kits           KitAdmissional[]
@@ -669,6 +671,7 @@ model Candidatura {
   funcionario Funcionario?         @relation(fields: [codFun], references: [codFun])
   timeline  CandidaturaHistorico[]
   match     MatchResumo?
+  iaAnalises IAAnaliseCandidatura[]
   processoAdmissao ProcessoAdmissao?
   convitesComportamentais ConviteComportamental[]
 
@@ -718,6 +721,55 @@ model EstagioConfig {
 
   @@unique([codTen, codEmp, estagio])
   @@map("TREETPCFG")
+}
+
+/// Configuração de IA por tenant.
+///
+/// Tabela própria em vez de coluna em `TSXTEN`: o papel `selx_app` tem INSERT e
+/// UPDATE **revogados** na tabela de tenants de propósito (migration `core_v1`:
+/// "lê, mas não altera tenants/permissões"). Configuração que a empresa edita
+/// pela interface precisa morar onde a aplicação escreve.
+model ConfiguracaoIa {
+  codIaCfg   BigInt   @id @default(autoincrement()) @map("CODIACFG")
+  codTen     BigInt   @unique @map("CODTEN")
+  /// "nuvem" (padrão) ou "local". Preferência, não política: dado marcado como
+  /// sensível vai para o provedor local de qualquer forma (ADR-0003).
+  provedorIa String   @default("nuvem") @map("PROVEDORIA")
+  dhInc      DateTime @default(now()) @map("DHINC")
+  codUsuInc  BigInt?  @map("CODUSUINC")
+  dhAlt      DateTime @updatedAt @map("DHALT")
+  codUsuAlt  BigInt?  @map("CODUSUALT")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+
+  @@map("TSXIACFG")
+}
+
+/// Análise de candidato por IA (RN-REC-013) — explica o match já calculado,
+/// nunca o produz. Cacheada por candidatura: é chamada paga e o recrutador
+/// reabre o painel muitas vezes.
+model IAAnaliseCandidatura {
+  codIaAnalise BigInt   @id @default(autoincrement()) @map("CODIAANALISE")
+  codTen       BigInt   @map("CODTEN")
+  codCdt       BigInt   @map("CODCDT")
+  conteudoJson Json     @map("CONTEUDOJSON")
+  /// Hash do dossiê enviado. Currículo novo ou avaliação comportamental
+  /// concluída mudam o hash e revelam que a análise guardada envelheceu —
+  /// mesma ideia do `HASHENTRADA` do match determinístico.
+  hashEntrada  String   @map("HASHENTRADA")
+  provedor     String?  @map("PROVEDOR")
+  modeloUsado  String?  @map("MODELOUSADO")
+  versaoPrompt String?  @map("VERSAOPROMPT")
+  duracaoMs    Int?     @map("DURACAOMS")
+  status       String   @default("OK") @map("STATUS")
+  dhInc        DateTime @default(now()) @map("DHINC")
+  codUsuInc    BigInt?  @map("CODUSUINC")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
+
+  @@index([codTen, codCdt])
+  @@map("TREIAANALISE")
 }
 
 /// Resumo de match determinístico (1:1 com a candidatura) — nunca LLM no score.

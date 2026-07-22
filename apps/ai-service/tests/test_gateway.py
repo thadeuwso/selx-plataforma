@@ -65,6 +65,43 @@ def test_provedor_configurado_passa_do_portao_de_desabilitado(monkeypatch):
     assert r.json()["detail"]["codigo"] == "PROVEDOR_INDISPONIVEL"
 
 
+def _pedido(**extra):
+    return cliente.post(
+        "/v1/ia/gerar",
+        json={
+            "purpose": "plataforma.diagnostico@v1",
+            "cod_ten": 1,
+            "mensagens": [{"papel": "user", "conteudo": "diagnóstico"}],
+            **extra,
+        },
+    )
+
+
+def test_preferencia_do_tenant_por_local_roteia_para_ollama(monkeypatch):
+    # Sem Ollama de verdade no ambiente de teste a chamada falha na conexão,
+    # não no roteamento — o que importa é que NÃO tentou a nuvem.
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-teste")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")  # porta fechada de propósito
+    r = _pedido(provedor_preferido="local")
+    assert r.json()["detail"]["codigo"] == "PROVEDOR_INDISPONIVEL_UPSTREAM"
+    assert r.json()["detail"]["provedor"] == "ollama"
+
+
+def test_politica_de_sensibilidade_vence_a_preferencia_do_tenant(monkeypatch):
+    """O tenant pode pedir nuvem; dado sensível continua sem sair da máquina."""
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-teste")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+    r = _pedido(provedor_preferido="nuvem", sensibilidade="sensivel")
+    assert r.json()["detail"]["provedor"] == "ollama"
+
+
+def test_preferencia_invalida_e_recusada_no_contrato():
+    r = _pedido(provedor_preferido="qualquer-coisa")
+    assert r.status_code == 422
+
+
 def test_saude_expoe_se_o_provedor_esta_configurado(monkeypatch):
     """`/health` respondia 200 mesmo sem provedor — o serviço parecia no ar e só
     falhava na hora de usar. Agora a configuração aparece no health."""

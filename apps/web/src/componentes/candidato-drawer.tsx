@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, fetchAutenticado } from "@/lib/api";
 import { Abas, Gaveta } from "./formulario";
+import { AnaliseIaCandidato } from "@/componentes/analise-ia-candidato";
 
 const DIMENSOES_CULTURA = [
   { chave: "autonomy", rotulo: "Autonomia" },
@@ -422,6 +423,7 @@ export function CandidatoDrawer({
               { id: "perfil", rotulo: "Resumo" },
               { id: "curriculo", rotulo: "Currículo" },
               { id: "comportamental", rotulo: "Avaliação" },
+              { id: "analise-ia", rotulo: "Análise IA" },
               { id: "historico", rotulo: "Histórico" },
               { id: "anotacoes", rotulo: "Anotações" },
             ]}
@@ -806,6 +808,10 @@ export function CandidatoDrawer({
               )}
             </div>
           )}
+
+          {/* Componente próprio: cuida do próprio carregamento e do próprio
+              estado — esta gaveta já é grande demais. */}
+          {tab === "analise-ia" && codCdt && <AnaliseIaCandidato codCdt={codCdt} />}
 
           {tab === "historico" && (
             <div style={{ display: "grid", gap: 10 }}>

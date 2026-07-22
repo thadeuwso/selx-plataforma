@@ -28,6 +28,7 @@ PURPOSES_REGISTRADOS = {
     "recrutamento.estruturar-vaga@v1",
     "comportamental.resumo@v1",
     "comportamental.perguntas-entrevista@v1",
+    "recrutamento.analise-candidato@v1",
 }
 
 _PADROES_PII = [
@@ -57,6 +58,14 @@ class RequisicaoGerar(BaseModel):
     mensagens: list[Mensagem] = Field(min_length=1)
     orcamento_tokens: int = Field(default=2048, gt=0, le=32768)
     sensibilidade: str = Field(default="normal", pattern="^(normal|sensivel)$")
+    provedor_preferido: str | None = Field(default=None, pattern="^(nuvem|local)$")
+    """Preferência do tenant, não política.
+
+    Empresa que exige não enviar dado para fora escolhe `local`. É só uma
+    preferência: `sensibilidade="sensivel"` continua forçando o provedor local
+    independentemente do que o tenant pediu — política da plataforma (ADR-0003)
+    não é negociável pela configuração de quem usa.
+    """
     esquema_saida: dict[str, Any] | None = None
     """JSON Schema opcional: quando presente, o provedor é instruído a responder
     em JSON e a saída é validada contra o schema antes de retornar ao chamador."""
@@ -96,8 +105,17 @@ def gerar(req: RequisicaoGerar) -> dict:
     mensagens = [{"papel": m.papel, "conteudo": redigir_pii(m.conteudo)} for m in req.mensagens]
     hash_entrada = hashlib.sha256("\n".join(m["conteudo"] for m in mensagens).encode()).hexdigest()
 
-    # 4. Roteamento por política (ADR-0003): dado SENSÍVEL nunca sai da máquina.
+    # 4. Roteamento (ADR-0003), em ordem de precedência:
+    #    ambiente -> preferência do tenant -> política. A política é a última
+    #    porque é a única que não se negocia: dado SENSÍVEL nunca sai da máquina,
+    #    mesmo que o tenant tenha pedido nuvem.
     provedor = (os.environ.get("AI_PROVIDER") or "").strip().lower()
+    if req.provedor_preferido == "local":
+        provedor = "ollama"
+    elif req.provedor_preferido == "nuvem" and provedor == "ollama":
+        # Só faz sentido honrar "nuvem" se houver provedor de nuvem configurado;
+        # sem chave, cair no local é melhor que devolver erro ao recrutador.
+        provedor = "openai" if os.environ.get("OPENAI_API_KEY") else provedor
     if req.sensibilidade == "sensivel":
         provedor = "ollama"
     if not provedor or provedor == "disabled":
@@ -151,11 +169,20 @@ def _chamar_ollama(
     try:
         resp = httpx.post(f"{base}/api/chat", json=corpo, timeout=180)
     except httpx.HTTPError as erro:
+        # Código distinto de PROVEDOR_INDISPONIVEL (adapter inexistente): aqui o
+        # adapter existe e o provedor é que não respondeu. `provedor` no corpo
+        # evita adivinhação quando o recrutador reporta "deu erro na IA".
         raise HTTPException(
-            503, {"codigo": "PROVEDOR_INDISPONIVEL", "mensagem": f"Ollama inacessível: {erro}", "correlation_id": correlation_id}
+            503,
+            {
+                "codigo": "PROVEDOR_INDISPONIVEL_UPSTREAM",
+                "provedor": "ollama",
+                "mensagem": f"Ollama inacessível: {erro}",
+                "correlation_id": correlation_id,
+            },
         ) from erro
     if resp.status_code != 200:
-        raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "detalhe": resp.text[:300], "correlation_id": correlation_id})
+        raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "provedor": "ollama", "detalhe": resp.text[:300], "correlation_id": correlation_id})
     dados = resp.json()
     conteudo = dados["message"]["content"]
     uso = {"prompt_tokens": dados.get("prompt_eval_count"), "completion_tokens": dados.get("eval_count")}
@@ -200,9 +227,9 @@ def _chamar_openai(
             ultimo_erro = f"HTTP {resp.status_code}"
             continue
         if resp.status_code != 200:
-            raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "detalhe": resp.text[:300], "correlation_id": correlation_id})
+            raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "provedor": "openai", "detalhe": resp.text[:300], "correlation_id": correlation_id})
         dados = resp.json()
         conteudo = dados["choices"][0]["message"]["content"]
         return conteudo, modelo, dados.get("usage", {})
 
-    raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "detalhe": ultimo_erro, "correlation_id": correlation_id})
+    raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "provedor": "openai", "detalhe": ultimo_erro, "correlation_id": correlation_id})

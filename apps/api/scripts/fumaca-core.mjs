@@ -1051,6 +1051,38 @@ verificar(
 const talentosB = await http("GET", "/candidatos?busca=Diana", null, tokenB);
 verificar("tenant B não encontra candidato do tenant A na busca", talentosB.json?.total === 0);
 
+// 26c. Configuração de IA do tenant e análise de candidato (RN-REC-013)
+// A geração em si NÃO entra na fumaça — é chamada a provedor pago, mesma razão
+// de `estruturar-ia`. Aqui se testa tudo o que é determinístico em volta dela.
+const cfgIaInicial = await http("GET", "/configuracoes/ia", null, tokenA2);
+verificar("configuração de IA nasce em nuvem (padrão)", cfgIaInicial.json?.provedorIa === "nuvem");
+
+const cfgIaLocal = await http("PATCH", "/configuracoes/ia", { provedorIa: "local" }, tokenA2);
+verificar("tenant escolhe processar IA localmente (200)", cfgIaLocal.status === 200 && cfgIaLocal.json?.provedorIa === "local");
+verificar(
+  "escolha persiste",
+  (await http("GET", "/configuracoes/ia", null, tokenA2)).json?.provedorIa === "local",
+);
+verificar(
+  "provedor inválido é recusado → 400",
+  (await http("PATCH", "/configuracoes/ia", { provedorIa: "gemini" }, tokenA2)).status === 400,
+);
+verificar(
+  "escolha do tenant A não vaza para o tenant B",
+  (await http("GET", "/configuracoes/ia", null, tokenB)).json?.provedorIa === "nuvem",
+);
+await http("PATCH", "/configuracoes/ia", { provedorIa: "nuvem" }, tokenA2);
+
+const analiseInexistente = await http("GET", `/candidaturas/${cdtComp.json?.codCdt}/analise-ia`, null, tokenA2);
+verificar(
+  "candidatura sem análise responde vazio, não erro",
+  analiseInexistente.status === 200 && !analiseInexistente.json,
+);
+verificar(
+  "tenant B não consulta análise de candidatura do tenant A → 400",
+  (await http("GET", `/candidaturas/${cdtComp.json?.codCdt}/analise-ia`, null, tokenB)).status === 400,
+);
+
 // 27a. Importação de currículos em lote
 const vagaLote = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Importação Lote" }, tokenA2);
 await http("PATCH", `/vagas/${vagaLote.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
