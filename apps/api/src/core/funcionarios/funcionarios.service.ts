@@ -5,6 +5,8 @@ export interface DadosAdmissao {
   codEmp: bigint;
   numCad: bigint;
   nomeFun: string;
+  /// Sem e-mail não há como enviar documento para assinatura (RN-SX-001).
+  email?: string;
   cgc?: string;
   dtAdm: Date;
   dtNasc?: Date;
@@ -46,6 +48,7 @@ export class FuncionariosService {
         codEmp: dados.codEmp,
         numCad: dados.numCad,
         nomeFun: dados.nomeFun,
+        email: dados.email,
         cgc: dados.cgc,
         dtAdm: dados.dtAdm,
         dtNasc: dados.dtNasc,

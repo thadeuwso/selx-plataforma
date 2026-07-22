@@ -520,6 +520,8 @@ const tokenAdm = iniciar.json?.tokenPub;
 
 const iniciarDeNovo = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/iniciar`, {}, tokenA2);
 verificar("reiniciar é idempotente (mesmo processo)", iniciarDeNovo.json?.codAdmProc === iniciar.json?.codAdmProc);
+verificar("iniciar admissão enfileira o e-mail do candidato", iniciar.json?.emailEnfileirado === true);
+verificar("reiniciar NÃO manda segundo e-mail", iniciarDeNovo.json?.emailEnfileirado === false);
 
 const detalheRh = await http("GET", `/candidaturas/${cdtProc.json?.codCdt}/admissao`, null, tokenA2);
 verificar("RH vê detalhe do processo", detalheRh.status === 200 && detalheRh.json?.status === "AGUARDANDO_CANDIDATO");
@@ -620,6 +622,12 @@ const aprovarAdmissao = await http("POST", `/candidaturas/${cdtProc.json?.codCdt
 verificar(
   "DP aprova: cria funcionário + dispara contrato + kit p/ assinatura (201)",
   aprovarAdmissao.status === 201 && !!aprovarAdmissao.json?.codFun && aprovarAdmissao.json?.assinaturas?.length === 2,
+);
+// A assinatura só chega ao destinatário porque o funcionário herda o e-mail do
+// candidato — antes disso `TFPFUN` nem tinha o campo (RN-SX-001).
+verificar(
+  "documentos de assinatura vão por e-mail, sem ninguém copiar link",
+  aprovarAdmissao.json?.emailsEnfileirados === 2 && aprovarAdmissao.json?.semEmail === 0,
 );
 
 const aprovarDeNovo = await http("POST", `/candidaturas/${cdtProc.json?.codCdt}/admissao/aprovar`, {

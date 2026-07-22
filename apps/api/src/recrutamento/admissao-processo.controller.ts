@@ -5,6 +5,8 @@ import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { DocumentosService } from '../core/documentos/documentos.service';
 import { FuncionariosService } from '../core/funcionarios/funcionarios.service';
+import { EmailService } from '../compartilhado/email/email.service';
+import { AvisoAssinaturaService } from '../core/documentos/aviso-assinatura.service';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
 
 const esquemaAprovar = z.object({
@@ -47,13 +49,21 @@ export class AdmissaoProcessoController {
     private readonly prisma: PrismaService,
     private readonly funcionariosService: FuncionariosService,
     private readonly documentosService: DocumentosService,
+    private readonly email: EmailService,
+    private readonly avisoAssinatura: AvisoAssinaturaService,
   ) {}
 
   @Post('iniciar')
   @Permissoes('recrutamento.candidatos.criar')
-  iniciar(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
-    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const cdt = await tx.candidatura.findFirst({ where: { codCdt: BigInt(codCdt), ativo: 'S' } });
+  async iniciar(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
+    const resultado = await this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cdt = await tx.candidatura.findFirst({
+        where: { codCdt: BigInt(codCdt), ativo: 'S' },
+        include: {
+          candidato: { select: { nomeCand: true, email: true } },
+          vaga: { select: { titulo: true, empresa: { select: { nomeFantasia: true } } } },
+        },
+      });
       if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
       if (cdt.estagio !== 'hired') {
         throw new BadRequestException('Candidatura precisa estar no estágio "hired" para iniciar admissão');
@@ -61,7 +71,15 @@ export class AdmissaoProcessoController {
       if (cdt.codFun) throw new BadRequestException(`Já admitido (CODFUN ${cdt.codFun})`);
 
       const existente = await tx.processoAdmissao.findUnique({ where: { codCdt: cdt.codCdt } });
-      if (existente) return { codAdmProc: existente.codAdmProc, tokenPub: existente.tokenPub, status: existente.status };
+      const contexto = {
+        email: cdt.candidato.email,
+        nomeCand: cdt.candidato.nomeCand,
+        tituloVaga: cdt.vaga.titulo,
+        nomeEmpresa: cdt.vaga.empresa.nomeFantasia,
+      };
+      if (existente) {
+        return { codAdmProc: existente.codAdmProc, tokenPub: existente.tokenPub, status: existente.status, contexto };
+      }
 
       const processo = await tx.processoAdmissao.create({
         data: {
@@ -81,8 +99,27 @@ export class AdmissaoProcessoController {
           codUsuInc: req.usuario.codUsu,
         },
       });
-      return { codAdmProc: processo.codAdmProc, tokenPub: processo.tokenPub, status: processo.status };
+      return { codAdmProc: processo.codAdmProc, tokenPub: processo.tokenPub, status: processo.status, contexto };
     });
+
+    // Fora da transação (RN-SX-001): a fila não pode segurar o commit do
+    // processo nem derrubá-lo se o SMTP estiver fora.
+    const { contexto, ...processo } = resultado;
+    const base = process.env.APP_URL ?? 'http://localhost:3002';
+    const envio = await this.email.enfileirar({
+      codTen: req.usuario.codTen,
+      destinatario: contexto.email,
+      template: 'processo-admissao',
+      chaveIdem: `admissao:${processo.codAdmProc}`,
+      codUsuInc: req.usuario.codUsu,
+      dados: {
+        nomeCandidato: contexto.nomeCand,
+        nomeEmpresa: contexto.nomeEmpresa,
+        tituloVaga: contexto.tituloVaga,
+        url: `${base}/admissao/${processo.tokenPub}`,
+      },
+    });
+    return { ...processo, emailEnfileirado: !envio.jaExistia, smtpConfigurado: this.email.configurado() };
   }
 
   @Get()
@@ -127,9 +164,9 @@ export class AdmissaoProcessoController {
    */
   @Post('aprovar')
   @Permissoes('core.funcionarios.criar')
-  aprovar(@Req() req: ReqAut, @Param('codCdt') codCdt: string, @Body() corpo: unknown) {
+  async aprovar(@Req() req: ReqAut, @Param('codCdt') codCdt: string, @Body() corpo: unknown) {
     const dados = validar(esquemaAprovar, corpo);
-    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+    const resultado = await this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
       const processo = await tx.processoAdmissao.findFirst({
         where: { codCdt: BigInt(codCdt) },
         include: { candidatura: { include: { candidato: true, vaga: true } } },
@@ -145,6 +182,9 @@ export class AdmissaoProcessoController {
         codEmp: cdt.vaga.codEmp,
         numCad: dados.numCad,
         nomeFun: cdt.candidato.nomeCand,
+        // O funcionário herda o e-mail do candidato: é o único endereço que a
+        // plataforma conhece, e sem ele não há como mandar documento para assinar.
+        email: cdt.candidato.email,
         cgc: dados.cgc ?? cdt.candidato.cgc ?? undefined,
         dtAdm: dados.dtAdm,
         codCar: dados.codCar ?? cdt.vaga.codCar ?? undefined,
@@ -185,5 +225,10 @@ export class AdmissaoProcessoController {
 
       return { codCdt: cdt.codCdt, codFun: funcionario.codFun, numCad: funcionario.numCad, assinaturas };
     });
+
+    // Depois do commit: o candidato aprovado recebe os documentos para assinar
+    // sem ninguém precisar copiar link nenhum (RN-SX-001).
+    const aviso = await this.avisoAssinatura.enfileirar(req.usuario.codTen, req.usuario.codUsu, resultado.assinaturas);
+    return { ...resultado, emailsEnfileirados: aviso.enfileirados, semEmail: aviso.semEmail };
   }
 }

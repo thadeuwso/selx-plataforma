@@ -13,6 +13,8 @@ export interface DadosTemplate {
   nomeEmpresa: string;
   tituloVaga: string;
   url: string;
+  /** Só para a assinatura: o nome do documento, que não é o título da vaga. */
+  nomeDocumento?: string;
   /** Só para a avaliação comportamental: quantas perguntas e o tempo estimado. */
   totalPerguntas?: number;
   tempoMin?: number | null;
@@ -97,6 +99,53 @@ export const TEMPLATES: Record<string, Montador> = {
         rodape,
       ].join('\n'),
       html: envelope('Avaliação de perfil comportamental', paragrafos, d.url, 'Responder avaliação'),
+    };
+  },
+
+  /** Processo de admissão: o candidato preenche dados e anexa documentos. */
+  'processo-admissao': (d) => {
+    const paragrafos = [
+      `Olá, ${d.nomeCandidato}.`,
+      `Boas-vindas! Para dar início à sua admissão na ${d.nomeEmpresa} como <strong>${d.tituloVaga}</strong>, precisamos de alguns dados e documentos seus.`,
+      'No link abaixo você preenche as informações e anexa os documentos. Pode fazer em etapas — o que você salvar fica guardado.',
+      'Assim que enviar, nossa equipe confere e avisa se faltar algo.',
+    ];
+    return {
+      assunto: `Sua admissão na ${d.nomeEmpresa} — dados e documentos`,
+      texto: [
+        `Olá, ${d.nomeCandidato}.`,
+        '',
+        `Boas-vindas! Para dar início à sua admissão na ${d.nomeEmpresa} como ${d.tituloVaga}, precisamos de alguns dados e documentos seus.`,
+        'No link abaixo você preenche as informações e anexa os documentos. Pode fazer em etapas — o que você salvar fica guardado.',
+        '',
+        d.url,
+        '',
+        rodape,
+      ].join('\n'),
+      html: envelope('Vamos começar sua admissão', paragrafos, d.url, 'Preencher meus dados'),
+    };
+  },
+
+  /** Documento aguardando assinatura eletrônica. */
+  'documento-assinatura': (d) => {
+    const paragrafos = [
+      `Olá, ${d.nomeCandidato}.`,
+      `A ${d.nomeEmpresa} enviou um documento para a sua assinatura: <strong>${d.nomeDocumento ?? "documento"}</strong>.`,
+      'Você consegue ler o documento inteiro antes de assinar. A assinatura é eletrônica e registra data, hora e o conteúdo exato que você leu.',
+    ];
+    return {
+      assunto: `Documento para assinatura — ${d.nomeDocumento ?? d.nomeEmpresa}`,
+      texto: [
+        `Olá, ${d.nomeCandidato}.`,
+        '',
+        `A ${d.nomeEmpresa} enviou um documento para a sua assinatura: ${d.nomeDocumento ?? "documento"}.`,
+        'Você consegue ler o documento inteiro antes de assinar. A assinatura é eletrônica e registra data, hora e o conteúdo exato que você leu.',
+        '',
+        d.url,
+        '',
+        rodape,
+      ].join('\n'),
+      html: envelope('Documento para assinar', paragrafos, d.url, 'Ler e assinar'),
     };
   },
 };

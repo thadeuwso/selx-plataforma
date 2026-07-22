@@ -4,6 +4,7 @@ import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
 import { PrismaService } from '../../compartilhado/prisma/prisma.service';
 import { DocumentosService } from './documentos.service';
+import { AvisoAssinaturaService } from './aviso-assinatura.service';
 
 const esquemaModelo = z.object({
   nomeDoc: z.string().min(3),
@@ -30,6 +31,7 @@ export class DocumentosController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentosService: DocumentosService,
+    private readonly avisoAssinatura: AvisoAssinaturaService,
   ) {}
 
   // ===== Modelos de documento =====
@@ -96,9 +98,9 @@ export class DocumentosController {
   /** Renderiza o modelo com os dados do funcionário e gera link público de assinatura (token opaco — ADR-0004 §5). */
   @Post('funcionarios/:codFun/assinaturas')
   @Permissoes('core.documentos.criar')
-  enviarParaAssinatura(@Req() req: ReqAut, @Param('codFun') codFun: string, @Body() corpo: unknown) {
+  async enviarParaAssinatura(@Req() req: ReqAut, @Param('codFun') codFun: string, @Body() corpo: unknown) {
     const dados = validar(esquemaEnvio, corpo);
-    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+    const assinatura = await this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
       this.documentosService.enviarParaAssinatura(
         tx,
         req.usuario.codTen,
@@ -107,5 +109,7 @@ export class DocumentosController {
         dados.codDoc,
       ),
     );
+    const aviso = await this.avisoAssinatura.enfileirar(req.usuario.codTen, req.usuario.codUsu, [assinatura]);
+    return { ...assinatura, emailEnfileirado: aviso.enfileirados > 0, funcionarioSemEmail: aviso.semEmail > 0 };
   }
 }

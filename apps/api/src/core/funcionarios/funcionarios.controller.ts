@@ -17,6 +17,7 @@ const esquemaFuncionario = z.object({
   codEmp: z.coerce.bigint(),
   numCad: z.coerce.bigint(),
   nomeFun: z.string().min(2),
+  email: z.string().email().optional(),
   cgc: z.string().optional(),
   dtAdm: z.coerce.date(),
   dtNasc: z.coerce.date().optional(),

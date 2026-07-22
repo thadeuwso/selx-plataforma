@@ -927,6 +927,9 @@ export class CandidatosController {
       return {
         codCdt: cdt.codCdt,
         nomeFun: cdt.candidato.nomeCand,
+        // O funcionário herda o e-mail do candidato: é o único endereço que a
+        // plataforma conhece, e sem ele não há como mandar documento para assinar.
+        email: cdt.candidato.email,
         cgc: cdt.candidato.cgc,
         codEmp: cdt.vaga.codEmp,
         codCar: cdt.vaga.codCar,

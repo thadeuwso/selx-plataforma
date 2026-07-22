@@ -32,7 +32,16 @@ export class DocumentosService {
 
     return tx.assinatura.create({
       data: { codTen, codDoc, codFun, conteudoRenderizado, hashConteudo, tokenPub, codUsuInc: codUsu },
-      select: { codAssin: true, tokenPub: true, status: true, documento: { select: { nomeDoc: true } } },
+      // Traz destinatário e empresa junto: quem chama precisa disso para
+      // enfileirar o e-mail DEPOIS do commit — enfileirar aqui dentro amarraria
+      // a assinatura à fila (RN-SX-001).
+      select: {
+        codAssin: true,
+        tokenPub: true,
+        status: true,
+        documento: { select: { nomeDoc: true } },
+        funcionario: { select: { nomeFun: true, email: true, empresa: { select: { nomeFantasia: true } } } },
+      },
     });
   }
 

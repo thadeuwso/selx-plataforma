@@ -166,6 +166,10 @@ model Funcionario {
   codEmp       BigInt    @map("CODEMP")
   numCad       BigInt    @map("NUMCAD")
   nomeFun      String    @map("NOMEFUN")
+  /// E-mail de contato. Sem ele não há como mandar documento para assinatura —
+  /// a assinatura eletrônica existia desde a migration 0008 e o link só podia
+  /// ser copiado à mão, porque não havia endereço registrado (RN-SX-001).
+  email        String?   @map("EMAIL")
   cgc          String?   @map("CGC")
   dtNasc       DateTime? @map("DTNASC") @db.Date
   dtAdm        DateTime  @map("DTADM") @db.Date
