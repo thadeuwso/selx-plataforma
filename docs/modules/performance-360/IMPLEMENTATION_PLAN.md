@@ -5,6 +5,7 @@
 > Migrations sempre incrementais + bloco RLS. Nada destrutivo.
 
 Estado atual: **Fases 1–5 entregues.** 4 (Visão 360 + `ProximaAcao`, mig 0033), 5a (360 por cargo: modelo/participantes/consolidação, mig 0034), **5b** (role-fit `CompetenciaCargo`/`situacaoAderenciaCargo`, heatmap, gaveta de detalhe da competência, config de esperadas por cargo; mig 0035).
+5c reescopou o modelo 360 (empresa/departamento/colaboradores em vez de cargo; `ModeloAlvo360`; resolução por precedência; migs 0036/0037). Role-fit foi para a tela "Competências do cargo".
 **Próxima: Fase 6 (metas e feedbacks — `Meta`/`ProgressoMeta`).**
 
 ---
