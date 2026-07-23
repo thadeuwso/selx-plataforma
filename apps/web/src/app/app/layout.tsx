@@ -35,6 +35,7 @@ const navegacao: GrupoNav[] = [
       { rota: "/app/empresa/organizacao", rotulo: "Departamentos e cargos" },
       { rota: "/app/empresa/projetos", rotulo: "Projetos e contratos" },
       { rota: "/app/empresa/desempenho", rotulo: "Avaliação de desempenho" },
+      { rota: "/app/empresa/aderencia", rotulo: "Painel de aderência" },
     ],
   },
   {

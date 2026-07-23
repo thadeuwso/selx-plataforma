@@ -2016,6 +2016,47 @@ verificar(
   (await http("GET", "/gestao-pessoas/ciclos", null, tokenB)).json?.length === 0,
 );
 
+// 33. Aderência ao desenvolvimento (RN-GP-023)
+const ader = await http("GET", `/gestao-pessoas/aderencia/detalhe?codFun=${funPdi.json?.codFun}`, null, tokenA2);
+verificar(
+  "aderência devolve score, nível e sinais derivados",
+  ader.status === 200 &&
+    typeof ader.json?.score === "number" &&
+    ["ADERENTE", "ATENCAO", "RISCO"].includes(ader.json?.nivel) &&
+    typeof ader.json?.sinais?.planosAtivos === "number",
+);
+verificar(
+  "sinal de desempenho usa a nota do último ciclo concluído (4)",
+  ader.json?.sinais?.ultimaNotaDesempenho === 4,
+);
+verificar("aderência sem funcionário → 400", (await http("GET", "/gestao-pessoas/aderencia/detalhe", null, tokenA2)).status === 400);
+
+const painel = await http("GET", "/gestao-pessoas/aderencia", null, tokenA2);
+verificar(
+  "painel lista funcionários ordenados do menor score ao maior",
+  painel.status === 200 &&
+    Array.isArray(painel.json) &&
+    painel.json.length >= 1 &&
+    (painel.json.length < 2 || painel.json[0].score <= painel.json[1].score),
+);
+
+// realimentação: gerar plano a partir das lacunas do último ciclo. O ciclo de
+// teste teve Colaboração com nota 1 (<=2), então vira uma ação.
+const gerado = await http("POST", `/gestao-pessoas/aderencia/${funPdi.json?.codFun}/plano`, {}, tokenA2);
+verificar(
+  "gera plano semeado pela competência fraca do último ciclo (201)",
+  gerado.status === 201 && !!gerado.json?.codPdi && gerado.json?.acoesCriadas === 1,
+);
+const planoGerado = await http("GET", `/gestao-pessoas/pdi/${gerado.json?.codPdi}`, null, tokenA2);
+verificar(
+  "plano gerado traz a ação da competência fraca (Colaboração)",
+  planoGerado.json?.acoes?.some((a) => a.competencia === "Colaboração"),
+);
+verificar(
+  "tenant B não gera plano para funcionário do tenant A → 400",
+  (await http("POST", `/gestao-pessoas/aderencia/${funPdi.json?.codFun}/plano`, {}, tokenB)).status === 400,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

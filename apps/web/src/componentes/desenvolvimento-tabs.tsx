@@ -3,14 +3,15 @@ import { useState } from "react";
 import { PdiFuncionario } from "@/componentes/pdi-funcionario";
 import { FeedbackFuncionario } from "@/componentes/feedback-funcionario";
 import { AvaliacoesFuncionario } from "@/componentes/avaliacoes-funcionario";
+import { AderenciaFuncionario } from "@/componentes/aderencia-funcionario";
 
 /**
- * Sub-navegação da aba Desenvolvimento: plano (PDI) e feedbacks são coisas
- * distintas do mesmo tema, e cada uma já é densa o bastante para não caberem
- * empilhadas na mesma rolagem.
+ * Sub-navegação da aba Desenvolvimento: plano (PDI), feedbacks, avaliações e
+ * aderência são frentes distintas do mesmo tema, cada uma densa o bastante para
+ * não caberem empilhadas na mesma rolagem.
  */
 export function DesenvolvimentoTabs({ codFun }: { codFun: string }) {
-  const [sub, setSub] = useState<"pdi" | "feedback" | "avaliacao">("pdi");
+  const [sub, setSub] = useState<"pdi" | "feedback" | "avaliacao" | "aderencia">("pdi");
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -19,6 +20,7 @@ export function DesenvolvimentoTabs({ codFun }: { codFun: string }) {
           { id: "pdi" as const, rotulo: "Plano" },
           { id: "feedback" as const, rotulo: "Feedbacks" },
           { id: "avaliacao" as const, rotulo: "Avaliações" },
+          { id: "aderencia" as const, rotulo: "Aderência" },
         ].map((s) => (
           <button
             key={s.id}
@@ -44,8 +46,10 @@ export function DesenvolvimentoTabs({ codFun }: { codFun: string }) {
         <PdiFuncionario codFun={codFun} />
       ) : sub === "feedback" ? (
         <FeedbackFuncionario codFun={codFun} />
-      ) : (
+      ) : sub === "avaliacao" ? (
         <AvaliacoesFuncionario codFun={codFun} />
+      ) : (
+        <AderenciaFuncionario codFun={codFun} />
       )}
     </div>
   );
