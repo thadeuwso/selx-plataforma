@@ -73,6 +73,7 @@ model Tenant {
   competenciasCiclo CompetenciaCiclo[]
   avaliacoesDesemp  AvaliacaoDesempenho[]
   notasCompetencia  NotaCompetencia[]
+  proximasAcoes     ProximaAcao[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -216,6 +217,7 @@ model Funcionario {
   planos          PlanoDesenvolvimento[]
   feedbacks       Feedback[]
   avaliacoesDesemp AvaliacaoDesempenho[]
+  proximasAcoes   ProximaAcao[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -293,6 +295,7 @@ model Usuario {
   pdisResp    PlanoDesenvolvimento[] @relation("PdiResponsavel")
   feedbacksAutor Feedback[]          @relation("FeedbackAutor")
   avaliacoesFeitas AvaliacaoDesempenho[] @relation("AvaliadorDesempenho")
+  proximasAcoesResp ProximaAcao[]       @relation("ProximaAcaoResp")
   favoritas   CandidaturaFavorita[]
   filtrosSalvos FiltroSalvo[]
 
@@ -1062,6 +1065,40 @@ model NotaCompetencia {
   @@unique([codAval, codComp])
   @@index([codTen, codAval])
   @@map("TGPNOTA")
+}
+
+/// Próxima ação do gestor no Painel 360 (performance-360, RN-GP-024).
+///
+/// O que fazer a seguir com o colaborador — agendar feedback, revisar meta,
+/// atribuir treinamento. Uma **recomendação vira tarefa**: nasce de sugestões
+/// (aderência, avaliação, IA) ou à mão, e aqui vira algo com prioridade, prazo e
+/// responsável. Não é decisão automática — é apoio, e cada uma se descarta.
+model ProximaAcao {
+  codProx      BigInt    @id @default(autoincrement()) @map("CODPROX")
+  codTen       BigInt    @map("CODTEN")
+  codFun       BigInt    @map("CODFUN")
+  acao         String    @map("ACAO")
+  /// ALTA | MEDIA | BAIXA
+  prioridade   String    @default("MEDIA") @map("PRIORIDADE")
+  prazo        DateTime? @map("PRAZO") @db.Date
+  /// Quem deve executar — FK p/ TSIUSU. Nulo = ainda não atribuído.
+  codUsuResp   BigInt?   @map("CODUSURESP")
+  /// MANUAL | ADERENCIA | AVALIACAO | IA — de onde a sugestão veio.
+  origem       String    @default("MANUAL") @map("ORIGEM")
+  justificativa String?  @map("JUSTIFICATIVA") @db.Text
+  /// ABERTA | CONCLUIDA | DESCARTADA. Descartar é legítimo — sugestão não é ordem.
+  status       String    @default("ABERTA") @map("STATUS")
+  dhConclusao  DateTime? @map("DHCONCLUSAO")
+  dhInc        DateTime  @default(now()) @map("DHINC")
+  codUsuInc    BigInt?   @map("CODUSUINC")
+  dhAlt        DateTime  @updatedAt @map("DHALT")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario @relation(fields: [codFun], references: [codFun])
+  responsavel Usuario?    @relation("ProximaAcaoResp", fields: [codUsuResp], references: [codUsu])
+
+  @@index([codTen, codFun, status])
+  @@map("TGPPROX")
 }
 
 /// Proposta ao candidato (RN-REC-018).

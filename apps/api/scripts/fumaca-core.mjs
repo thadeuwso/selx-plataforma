@@ -2098,6 +2098,45 @@ verificar(
   (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenB)).status === 400,
 );
 
+// 36. Painel 360 — desempenho + próximos passos (Fase 4)
+const desemp = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/desempenho`, null, tokenA2);
+verificar(
+  "desempenho 360: classificação, distribuição e destaques",
+  desemp.status === 200 &&
+    desemp.json?.classificacao?.chave === "BOM" && // nota 4.0
+    Array.isArray(desemp.json?.distribuicao) &&
+    desemp.json?.distribuicao?.length === 5 &&
+    Array.isArray(desemp.json?.destaques),
+);
+verificar(
+  "distribuição soma os critérios avaliados",
+  desemp.json?.distribuicao?.reduce((s, f) => s + f.quantidade, 0) === desemp.json?.criteriosAvaliados,
+);
+
+const prox0 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, null, tokenA2);
+verificar(
+  "próximos passos começa com ações abertas + sugestões da aderência",
+  prox0.status === 200 && Array.isArray(prox0.json?.acoes) && Array.isArray(prox0.json?.sugestoes),
+);
+
+const novaProx = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, {
+  acao: "Agendar conversa de feedback", prioridade: "ALTA",
+}, tokenA2);
+verificar("cria próxima ação (201)", novaProx.status === 201 && novaProx.json?.status === "ABERTA");
+verificar("ação vazia é recusada → 400", (await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, { acao: "" }, tokenA2)).status === 400);
+
+const proxLista = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, null, tokenA2);
+verificar("ação criada aparece na lista de abertas", proxLista.json?.acoes?.some((a) => a.codProx === novaProx.json?.codProx));
+
+const concluiuProx = await http("PATCH", `/gestao-pessoas/colaboradores/proximos-passos/${novaProx.json?.codProx}`, { status: "CONCLUIDA" }, tokenA2);
+verificar("conclui a ação e ela sai das abertas", concluiuProx.json?.ok === true &&
+  !(await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, null, tokenA2)).json?.acoes?.some((a) => a.codProx === novaProx.json?.codProx),
+);
+verificar(
+  "tenant B não cria próxima ação p/ colaborador do tenant A → 400",
+  (await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, { acao: "x intruso" }, tokenB)).status === 400,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

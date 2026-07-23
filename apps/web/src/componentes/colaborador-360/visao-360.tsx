@@ -1,5 +1,9 @@
 "use client";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import type { Colaborador360 } from "@/componentes/colaborador-360/header";
+import { GraficoEvolucao } from "@/componentes/colaborador-360/grafico-evolucao";
+import { ProximosPassos } from "@/componentes/colaborador-360/proximos-passos";
 
 const NIVEL: Record<string, { texto: string; cor: string }> = {
   ADERENTE: { texto: "Aderente", cor: "var(--feedback-success, #15803d)" },
@@ -7,43 +11,61 @@ const NIVEL: Record<string, { texto: string; cor: string }> = {
   RISCO: { texto: "Em risco", cor: "var(--feedback-danger, #b91c1c)" },
 };
 
+interface Desempenho {
+  classificacao: { chave: string; rotulo: string } | null;
+  notaAtual: number | null;
+  notaAnterior: number | null;
+  tendencia: number | null;
+  totalCriterios: number;
+  criteriosAvaliados: number;
+  evolucao: { ciclo: string; dtFim: string; nota: number }[];
+  distribuicao: { chave: string; rotulo: string; quantidade: number; percentual: number }[];
+  destaques: { competencia: string; nota: number }[];
+  atencao: { competencia: string; nota: number }[];
+}
+
 /**
- * Visão 360 (performance-360, Fase 3) — resumo executivo a partir do agregador.
- *
- * Prioridade de leitura: resumo → nota/tendência → aderência → contexto (PDI,
- * feedbacks). Blocos mais ricos (evolução, competências, IA) chegam nas próximas
- * fases; aqui já se responde "como está e o que puxa atenção".
+ * Visão 360 (performance-360, Fase 4) — resumo executivo, evolução, distribuição,
+ * destaques / pontos de atenção e próximos passos. Prioridade de leitura:
+ * resumo → evolução → destaques → atenção → próximos passos → contexto.
  */
 export function Visao360({ dados }: { dados: Colaborador360 }) {
-  const a = dados.avaliacao;
+  const codFun = dados.colaborador.codFun;
+  const [d, setD] = useState<Desempenho | null>(null);
   const nivel = NIVEL[dados.aderencia.nivel];
+
+  useEffect(() => {
+    void api<Desempenho>(`/gestao-pessoas/colaboradores/${codFun}/desempenho`).then((r) => {
+      if (r.status === 200 && r.json) setD(r.json);
+    });
+  }, [codFun]);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+      {/* Resumo executivo */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <Cartao titulo="Nota geral">
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 34, fontWeight: 700 }}>{a?.notaAtual != null ? a.notaAtual.toFixed(1) : "—"}</span>
+            <span style={{ fontSize: 34, fontWeight: 700 }}>{d?.notaAtual != null ? d.notaAtual.toFixed(1) : "—"}</span>
             <span style={{ fontSize: 13, color: "var(--text-muted)" }}>de 5,0</span>
           </div>
-          {a?.tendencia != null && a.tendencia !== 0 ? (
-            <div style={{ fontSize: 12, color: a.tendencia > 0 ? "var(--feedback-success, #15803d)" : "var(--feedback-danger, #b91c1c)", marginTop: 2 }}>
-              {a.tendencia > 0 ? "▲" : "▼"} {Math.abs(a.tendencia).toFixed(1)} vs. ciclo anterior
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-              {a?.notaAnterior != null ? "Sem variação" : "Sem ciclo anterior concluído"}
-            </div>
-          )}
+          <div style={{ fontSize: 12, marginTop: 2 }}>
+            {d?.classificacao ? <span style={{ fontWeight: 600 }}>{d.classificacao.rotulo}</span> : <span style={{ color: "var(--text-muted)" }}>Sem avaliação</span>}
+            {d?.tendencia != null && d.tendencia !== 0 && (
+              <span style={{ marginLeft: 8, color: d.tendencia > 0 ? "var(--feedback-success, #15803d)" : "var(--feedback-danger, #b91c1c)" }}>
+                {d.tendencia > 0 ? "▲" : "▼"} {Math.abs(d.tendencia).toFixed(1)}
+              </span>
+            )}
+          </div>
         </Cartao>
 
         <Cartao titulo="Avaliação">
           <div style={{ fontSize: 15, fontWeight: 600 }}>
-            {a ? `${a.competenciasComNota}/${a.totalCompetencias}` : "—"}
+            {d ? `${d.criteriosAvaliados}/${d.totalCriterios}` : "—"}
             <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 400 }}> critérios avaliados</span>
           </div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-            {a?.avaliador ? `Avaliador: ${a.avaliador}` : "Sem avaliador definido"}
+            {dados.avaliacao?.avaliador ? `Avaliador: ${dados.avaliacao.avaliador}` : "Sem avaliador definido"}
           </div>
         </Cartao>
 
@@ -68,20 +90,62 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
         </Cartao>
       </div>
 
-      <div
-        style={{
-          border: "1px dashed var(--border-default)",
-          borderRadius: 10,
-          padding: 20,
-          color: "var(--text-muted)",
-          fontSize: 13,
-          lineHeight: 1.6,
-        }}
-      >
-        Evolução histórica, comparação entre avaliadores, competências detalhadas, metas, resumo por IA e próximos
-        passos entram nas próximas fases do Painel 360. Esta é a estrutura base (Fase 3): identidade, nota,
-        aderência e contexto de desenvolvimento — já a partir dos dados reais do colaborador.
+      {/* Evolução + distribuição */}
+      <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 12 }}>
+        <Cartao titulo="Evolução no período">
+          {d ? <GraficoEvolucao pontos={d.evolucao.map((e) => ({ rotulo: e.ciclo, valor: e.nota }))} /> : <Carregando />}
+        </Cartao>
+        <Cartao titulo="Resumo da avaliação">
+          {d ? <Distribuicao dados={d.distribuicao} total={d.criteriosAvaliados} /> : <Carregando />}
+        </Cartao>
       </div>
+
+      {/* Destaques + atenção */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Cartao titulo="Maiores destaques">
+          <ListaCompetencias itens={d?.destaques ?? null} cor="var(--feedback-success, #15803d)" vazio="Sem competências avaliadas." />
+        </Cartao>
+        <Cartao titulo="Pontos de atenção">
+          <ListaCompetencias itens={d?.atencao ?? null} cor="var(--amber-700, #714E08)" vazio="Sem competências avaliadas." />
+        </Cartao>
+      </div>
+
+      {/* Próximos passos */}
+      <ProximosPassos codFun={codFun} />
+    </div>
+  );
+}
+
+function Distribuicao({ dados, total }: { dados: Desempenho["distribuicao"]; total: number }) {
+  if (total === 0) return <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Nenhum critério avaliado ainda.</p>;
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {dados.map((f) => (
+        <div key={f.chave}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+            <span>{f.rotulo}</span>
+            <span style={{ color: "var(--text-muted)" }}>{f.percentual}% ({f.quantidade})</span>
+          </div>
+          <div style={{ height: 6, background: "var(--border-default)", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${f.percentual}%`, background: "var(--brand-700)", borderRadius: 999 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ListaCompetencias({ itens, cor, vazio }: { itens: { competencia: string; nota: number }[] | null; cor: string; vazio: string }) {
+  if (itens === null) return <Carregando />;
+  if (itens.length === 0) return <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{vazio}</p>;
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {itens.map((c, i) => (
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+          <span style={{ fontSize: 13 }}>{c.competencia}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: cor, flexShrink: 0 }}>★ {c.nota.toFixed(1)}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -89,8 +153,12 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
 function Cartao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div style={{ border: "1px solid var(--border-default)", borderRadius: 10, padding: 16, background: "var(--surface-default)" }}>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>{titulo}</div>
+      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>{titulo}</div>
       {children}
     </div>
   );
+}
+
+function Carregando() {
+  return <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Carregando…</p>;
 }
