@@ -12,6 +12,7 @@ import { AnaliseCandidatoController } from './analise-candidato.controller';
 import { EntrevistasController } from './entrevistas.controller';
 import { TriagemController } from './triagem.controller';
 import { PropostasController } from './propostas.controller';
+import { RelatorioController } from './relatorio.controller';
 import { CulturaEmpresaController } from './cultura-empresa.controller';
 import { PortalCandidatoController } from './portal-candidato.controller';
 import { IaVagasController } from './ia-vagas.controller';
@@ -29,6 +30,7 @@ import { VagasController } from './vagas.controller';
     EntrevistasController,
     TriagemController,
     PropostasController,
+    RelatorioController,
     CulturaEmpresaController,
     PortalCandidatoController,
     AdmissaoProcessoController,

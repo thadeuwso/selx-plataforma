@@ -1089,6 +1089,32 @@ verificar(
   reconvite.json?.codConv === conviteComEmail.json?.codConv && reconvite.json?.emailEnfileirado === false,
 );
 
+// 23z. Relatório consolidado de recrutamento (RN-REC-019)
+const relatorio = await http("GET", "/recrutamento/relatorio?dias=365", null, tokenA2);
+verificar(
+  "relatório responde com funil, tempo de contratação e propostas",
+  relatorio.status === 200 &&
+    Array.isArray(relatorio.json?.funil) &&
+    relatorio.json.funil.length === 7 &&
+    "tempoContratacao" in relatorio.json &&
+    "propostas" in relatorio.json,
+);
+// O funil é monotônico decrescente: nunca chega mais gente à etapa seguinte.
+const alcances = relatorio.json.funil.map((f) => f.alcancaram);
+verificar(
+  "funil é monotônico — cada etapa tem no máximo o que a anterior teve",
+  alcances.every((n, i) => i === 0 || n <= alcances[i - 1]),
+);
+verificar(
+  "primeira etapa (applied) tem a base total de candidaturas",
+  relatorio.json.funil[0].alcancaram === relatorio.json.totais.candidaturas,
+);
+const relatorioB = await http("GET", "/recrutamento/relatorio?dias=365", null, tokenB);
+verificar(
+  "relatório do tenant B não soma candidaturas do tenant A",
+  relatorioB.json?.totais?.candidaturas < relatorio.json.totais.candidaturas,
+);
+
 // 24a. Proposta e fechamento do funil (RN-REC-018)
 const vagaProp = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Proposta" }, tokenA2);
 await http("PATCH", `/vagas/${vagaProp.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
