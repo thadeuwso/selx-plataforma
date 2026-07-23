@@ -2146,18 +2146,24 @@ const fun360 = await http("POST", "/funcionarios", {
 }, tokenA2);
 verificar("cria funcionário com cargo 360 (201)", fun360.status === 201);
 
-// Modelo 360 do cargo: AUTO (peso 1) + GESTOR (peso 3)
-const putMod = await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, {
+// Modelo 360 com escopo (RN-GP-027): mira o colaborador fun360 — AUTO (peso 1) + GESTOR (peso 3)
+const novoMod = await http("POST", "/gestao-pessoas/modelos-360", {
+  nome: "Modelo QA 360", colaboradores: [fun360.json?.codFun],
   avaliadores: [{ tipo: "AUTO", peso: 1 }, { tipo: "GESTOR", peso: 3 }],
 }, tokenA2);
-verificar("configura modelo 360 do cargo (ok)", putMod.json?.ok === true);
-const getMod = await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, null, tokenA2);
-verificar("modelo 360 traz os 2 tipos com peso", getMod.json?.modelo?.avaliadores?.length === 2);
-// Remoção soft: tirar AUTO deixa só GESTOR
-await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, { avaliadores: [{ tipo: "GESTOR", peso: 3 }] }, tokenA2);
-verificar("retirar um tipo é soft-remove (fica 1)", (await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, null, tokenA2)).json?.modelo?.avaliadores?.length === 1);
+verificar("cria modelo 360 com escopo (ok)", novoMod.json?.ok === true && !!novoMod.json?.codMod);
+const getMod = await http("GET", `/gestao-pessoas/modelos-360/${novoMod.json?.codMod}`, null, tokenA2);
+verificar("modelo traz 2 tipos e 1 colaborador-alvo", getMod.json?.avaliadores?.length === 2 && getMod.json?.colaboradores?.length === 1);
+const listaMod = await http("GET", "/gestao-pessoas/modelos-360", null, tokenA2);
+verificar(
+  "lista de modelos traz o grau derivado (180°)",
+  listaMod.json?.find((m) => String(m.codMod) === String(novoMod.json?.codMod))?.grau === "180°",
+);
+// Soft-remove de tipo: atualizar tirando AUTO deixa só GESTOR
+await http("PUT", `/gestao-pessoas/modelos-360/${novoMod.json?.codMod}`, { nome: "Modelo QA 360", colaboradores: [fun360.json?.codFun], avaliadores: [{ tipo: "GESTOR", peso: 3 }] }, tokenA2);
+verificar("retirar um tipo é soft-remove (fica 1)", (await http("GET", `/gestao-pessoas/modelos-360/${novoMod.json?.codMod}`, null, tokenA2)).json?.avaliadores?.length === 1);
 // Restaura os 2 para o teste de consolidação
-await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, { avaliadores: [{ tipo: "AUTO", peso: 1 }, { tipo: "GESTOR", peso: 3 }] }, tokenA2);
+await http("PUT", `/gestao-pessoas/modelos-360/${novoMod.json?.codMod}`, { nome: "Modelo QA 360", colaboradores: [fun360.json?.codFun], avaliadores: [{ tipo: "AUTO", peso: 1 }, { tipo: "GESTOR", peso: 3 }] }, tokenA2);
 
 // Ciclo com 1 competência, aberto, e o funcionário 360 enturmado
 const ciclo360 = await http("POST", "/gestao-pessoas/ciclos", { nome: "Ciclo 360", dtInicio: "2026-07-01", dtFim: "2026-12-31" }, tokenA2);

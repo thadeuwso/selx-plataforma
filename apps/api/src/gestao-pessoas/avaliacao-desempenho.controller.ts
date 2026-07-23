@@ -5,6 +5,7 @@ import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard'
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
 import { podeConcluir } from './avaliacao-desempenho';
 import { resolverAvaliacao } from './nota-avaliacao';
+import { Avaliacao360Controller } from './avaliacao-360.controller';
 
 const esquemaCiclo = z.object({
   nome: z.string().min(2).max(160),
@@ -351,7 +352,7 @@ export class AvaliacaoDesempenhoController {
       if (!ciclo) throw new NotFoundException('Ciclo inexistente neste tenant');
       if (ciclo.status === 'ENCERRADO') throw new BadRequestException('Ciclo encerrado não aceita novos avaliados');
 
-      const func = await tx.funcionario.findFirst({ where: { codFun: dados.codFun, ativo: 'S' }, select: { codFun: true, codCar: true } });
+      const func = await tx.funcionario.findFirst({ where: { codFun: dados.codFun, ativo: 'S' }, select: { codFun: true, codEmp: true, codDep: true } });
       if (!func) throw new BadRequestException('Funcionário inexistente neste tenant');
 
       // Uma avaliação por funcionário por ciclo — não avaliar a mesma pessoa duas
@@ -371,24 +372,19 @@ export class AvaliacaoDesempenhoController {
         },
       });
 
-      // 360 configurável por cargo (RN-GP-025): se o cargo do funcionário tem
-      // modelo, instancia um participante por tipo (sem pessoa ainda). Cargo sem
-      // modelo mantém a avaliação de avaliador único de sempre.
-      if (func.codCar) {
-        const modelo = await tx.modeloAvaliacao360.findFirst({
-          where: { codCar: func.codCar, ativo: 'S' },
-          include: { avaliadores: { where: { ativo: 'S' } } },
+      // 360 com escopo (RN-GP-027): acha o modelo mais específico que cobre este
+      // funcionário (colaborador › departamento › empresa › padrão) e instancia
+      // um participante por tipo. Ninguém coberto mantém o avaliador único.
+      const modelo = await Avaliacao360Controller.modeloAplicavel(tx, func);
+      if (modelo) {
+        await tx.participanteAvaliacao.createMany({
+          data: modelo.avaliadores.map((a) => ({
+            codTen: req.usuario.codTen,
+            codAval: avaliacao.codAval,
+            tipo: a.tipo,
+            peso: a.peso,
+          })),
         });
-        if (modelo && modelo.avaliadores.length > 0) {
-          await tx.participanteAvaliacao.createMany({
-            data: modelo.avaliadores.map((a) => ({
-              codTen: req.usuario.codTen,
-              codAval: avaliacao.codAval,
-              tipo: a.tipo,
-              peso: a.peso,
-            })),
-          });
-        }
       }
       return avaliacao;
     });

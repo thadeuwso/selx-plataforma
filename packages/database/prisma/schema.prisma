@@ -79,6 +79,7 @@ model Tenant {
   participantesAval ParticipanteAvaliacao[]
   notasParticipante NotaParticipante[]
   competenciasCargo CompetenciaCargo[]
+  modeloAlvos360    ModeloAlvo360[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -127,6 +128,7 @@ model Empresa {
   centros       CentroResultado[]
   usuarioPapeis UsuarioPapel[]
   vagas         Vaga[]
+  modelos360    ModeloAvaliacao360[]
 
   @@index([codTen])
   @@index([codEmpMatriz])
@@ -148,7 +150,6 @@ model Cargo {
   tenant       Tenant        @relation(fields: [codTen], references: [codTen])
   funcionarios Funcionario[]
   vagas        Vaga[]
-  modelos360   ModeloAvaliacao360[]
   competenciasEsperadas CompetenciaCargo[]
 
   @@unique([codTen, nomeCar])
@@ -225,6 +226,7 @@ model Funcionario {
   feedbacks       Feedback[]
   avaliacoesDesemp AvaliacaoDesempenho[]
   proximasAcoes   ProximaAcao[]
+  alvos360        ModeloAlvo360[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -439,6 +441,7 @@ model Departamento {
   filhos       Departamento[] @relation("HierarquiaDep")
   funcionarios Funcionario[]
   vagas        Vaga[]
+  modelos360   ModeloAvaliacao360[]
 
   @@index([codTen])
   @@map("TFPDEP")
@@ -1111,28 +1114,54 @@ model ProximaAcao {
   @@map("TGPPROX")
 }
 
-/// Modelo de avaliação 360 por cargo (performance-360, RN-GP-025).
+/// Modelo de avaliação 360 com escopo (performance-360, RN-GP-025 / RN-GP-027).
 ///
-/// A empresa define, por **cargo**, como a avaliação 360 funciona — quais tipos
-/// de avaliador participam e o peso de cada um. Espelha o idioma "config por X
-/// com padrão" já usado no recrutamento (perfil por vaga + padrão). Cargo sem
-/// modelo cai no comportamento de avaliador único de sempre.
+/// A empresa cria modelos nomeados e customizáveis: quais tipos de avaliador
+/// participam e o peso de cada um (o grau 180/270/360 é derivado disso). Cada
+/// modelo tem um **escopo** — empresa e/ou departamento (nulos = mais amplo) — e
+/// pode ainda mirar **colaboradores específicos** (`ModeloAlvo360`). Ao enturmar,
+/// vale o modelo mais específico: colaborador › departamento › empresa › padrão
+/// do tenant. Ninguém coberto cai no avaliador único de sempre. Ex.: o gestor de
+/// um time recebe um modelo 270 por alvo, os subordinados um 180 por departamento.
 model ModeloAvaliacao360 {
   codMod    BigInt   @id @default(autoincrement()) @map("CODMOD")
   codTen    BigInt   @map("CODTEN")
-  codCar    BigInt   @map("CODCAR")
   nome      String   @map("NOME")
+  /// Escopo por empresa (nulo = todas as empresas do tenant).
+  codEmp    BigInt?  @map("CODEMP")
+  /// Escopo por departamento (nulo = todos).
+  codDep    BigInt?  @map("CODDEP")
   ativo     String   @default("S") @map("ATIVO") @db.Char(1)
   dhInc     DateTime @default(now()) @map("DHINC")
   codUsuInc BigInt?  @map("CODUSUINC")
   dhAlt     DateTime @updatedAt @map("DHALT")
 
-  tenant      Tenant               @relation(fields: [codTen], references: [codTen])
-  cargo       Cargo                @relation(fields: [codCar], references: [codCar])
-  avaliadores ModeloAvaliador360[]
+  tenant       Tenant               @relation(fields: [codTen], references: [codTen])
+  empresa      Empresa?             @relation(fields: [codEmp], references: [codEmp])
+  departamento Departamento?        @relation(fields: [codDep], references: [codDep])
+  avaliadores  ModeloAvaliador360[]
+  alvos        ModeloAlvo360[]
 
-  @@unique([codTen, codCar])
+  @@index([codTen, ativo])
   @@map("TGPMOD360")
+}
+
+/// Colaborador-alvo de um modelo 360 (RN-GP-027) — o escopo mais específico.
+model ModeloAlvo360 {
+  codModAlvo BigInt @id @default(autoincrement()) @map("CODMODALVO")
+  codTen     BigInt @map("CODTEN")
+  codMod     BigInt @map("CODMOD")
+  codFun     BigInt @map("CODFUN")
+  /// "N" quando o colaborador foi retirado do modelo (soft-remove, sem DELETE).
+  ativo      String @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant      Tenant             @relation(fields: [codTen], references: [codTen])
+  modelo      ModeloAvaliacao360 @relation(fields: [codMod], references: [codMod])
+  funcionario Funcionario        @relation(fields: [codFun], references: [codFun])
+
+  @@unique([codMod, codFun])
+  @@index([codTen, codFun])
+  @@map("TGPMOD360ALVO")
 }
 
 /// Tipo de avaliador de um modelo 360 (RN-GP-025).

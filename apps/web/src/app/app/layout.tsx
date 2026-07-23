@@ -42,6 +42,7 @@ const navegacao: GrupoNav[] = [
       { rota: "/app/gestao-pessoas/desempenho", rotulo: "Avaliação de desempenho" },
       { rota: "/app/gestao-pessoas/aderencia", rotulo: "Painel de aderência" },
       { rota: "/app/gestao-pessoas/modelos-360", rotulo: "Modelos de avaliação 360" },
+      { rota: "/app/gestao-pessoas/competencias-cargo", rotulo: "Competências do cargo" },
     ],
   },
   {

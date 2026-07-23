@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Put, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
@@ -9,8 +9,18 @@ type ReqAut = Request & { usuario: UsuarioAutenticado };
 
 export const TIPOS_AVALIADOR = ['AUTO', 'GESTOR', 'PAR', 'LIDERADO', 'COMITE', 'CLIENTE_INTERNO'] as const;
 
+/** Grau derivado dos tipos: ≤2 → 180°, 3 → 270°, ≥4 → 360°. Só um rótulo. */
+export function grauDoModelo(qtdTipos: number): string {
+  if (qtdTipos >= 4) return '360°';
+  if (qtdTipos === 3) return '270°';
+  return '180°';
+}
+
 const esquemaModelo = z.object({
-  nome: z.string().min(2).max(160).optional(),
+  nome: z.string().min(2).max(160),
+  codEmp: z.coerce.bigint().nullish(),
+  codDep: z.coerce.bigint().nullish(),
+  colaboradores: z.array(z.coerce.bigint()).default([]),
   avaliadores: z
     .array(
       z.object({
@@ -61,110 +71,177 @@ function validar<T extends z.ZodTypeAny>(esquema: T, corpo: unknown): z.infer<T>
 export class Avaliacao360Controller {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ---- Modelo 360 por cargo ----
+  // ---- Modelos 360 com escopo (empresa/departamento/colaboradores) ----
 
-  /** Lista cargos com o resumo do modelo 360 (para a tela de configuração). */
+  /** Lista os modelos do tenant com escopo, tipos e grau. */
   @Get('modelos-360')
   @Permissoes('gestaopessoas.avaliacoes.ler')
   async listarModelos(@Req() req: ReqAut) {
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const cargos = await tx.cargo.findMany({
+      const modelos = await tx.modeloAvaliacao360.findMany({
         where: { ativo: 'S' },
-        orderBy: { nomeCar: 'asc' },
+        orderBy: { codMod: 'desc' },
         select: {
-          codCar: true,
-          nomeCar: true,
-          modelos360: {
-            where: { ativo: 'S' },
-            select: { codMod: true, avaliadores: { where: { ativo: 'S' }, select: { tipo: true, peso: true } } },
-          },
+          codMod: true,
+          nome: true,
+          empresa: { select: { nomeFantasia: true } },
+          departamento: { select: { descrDep: true } },
+          avaliadores: { where: { ativo: 'S' }, select: { tipo: true } },
+          _count: { select: { alvos: true } },
         },
       });
-      return cargos.map((c) => {
-        const modelo = c.modelos360[0] ?? null;
-        return {
-          codCar: c.codCar,
-          nomeCar: c.nomeCar,
-          temModelo: !!modelo,
-          tipos: modelo?.avaliadores.map((a) => a.tipo) ?? [],
-        };
-      });
+      return modelos.map((m) => ({
+        codMod: m.codMod,
+        nome: m.nome,
+        empresa: m.empresa?.nomeFantasia ?? null,
+        departamento: m.departamento?.descrDep ?? null,
+        qtdColaboradores: m._count.alvos,
+        tipos: m.avaliadores.map((a) => a.tipo),
+        grau: grauDoModelo(m.avaliadores.length),
+      }));
     });
   }
 
-  @Get('cargos/:codCar/modelo-360')
+  @Get('modelos-360/:codMod')
   @Permissoes('gestaopessoas.avaliacoes.ler')
-  async obterModelo(@Req() req: ReqAut, @Param('codCar') codCar: string) {
+  async detalharModelo(@Req() req: ReqAut, @Param('codMod') codMod: string) {
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const cargo = await tx.cargo.findFirst({
-        where: { codCar: BigInt(codCar), ativo: 'S' },
-        select: { codCar: true, nomeCar: true },
+      const m = await tx.modeloAvaliacao360.findFirst({
+        where: { codMod: BigInt(codMod), ativo: 'S' },
+        include: {
+          avaliadores: { where: { ativo: 'S' }, orderBy: { codModAval: 'asc' } },
+          alvos: { select: { codFun: true, funcionario: { select: { nomeFun: true } } } },
+        },
       });
-      if (!cargo) throw new NotFoundException('Cargo inexistente neste tenant');
-      const modelo = await tx.modeloAvaliacao360.findFirst({
-        where: { codCar: BigInt(codCar), ativo: 'S' },
-        include: { avaliadores: { where: { ativo: 'S' }, orderBy: { codModAval: 'asc' } } },
-      });
+      if (!m) throw new NotFoundException('Modelo inexistente neste tenant');
       return {
-        cargo,
-        modelo: modelo
-          ? {
-              codMod: modelo.codMod,
-              nome: modelo.nome,
-              avaliadores: modelo.avaliadores.map((a) => ({
-                tipo: a.tipo,
-                peso: a.peso,
-                obrigatorio: a.obrigatorio === 'S',
-              })),
-            }
-          : null,
+        codMod: m.codMod,
+        nome: m.nome,
+        codEmp: m.codEmp,
+        codDep: m.codDep,
+        avaliadores: m.avaliadores.map((a) => ({ tipo: a.tipo, peso: a.peso, obrigatorio: a.obrigatorio === 'S' })),
+        colaboradores: m.alvos.map((a) => ({ codFun: a.codFun, nome: a.funcionario.nomeFun })),
       };
     });
   }
 
-  @Put('cargos/:codCar/modelo-360')
+  @Post('modelos-360')
   @Permissoes('gestaopessoas.avaliacoes.criar')
-  async salvarModelo(@Req() req: ReqAut, @Param('codCar') codCar: string, @Body() corpo: unknown) {
+  async criarModelo(@Req() req: ReqAut, @Body() corpo: unknown) {
     const dados = validar(esquemaModelo, corpo);
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const cargo = await tx.cargo.findFirst({ where: { codCar: BigInt(codCar), ativo: 'S' } });
-      if (!cargo) throw new NotFoundException('Cargo inexistente neste tenant');
-
-      const modelo = await tx.modeloAvaliacao360.upsert({
-        where: { codTen_codCar: { codTen: req.usuario.codTen, codCar: BigInt(codCar) } },
-        create: {
+      const modelo = await tx.modeloAvaliacao360.create({
+        data: {
           codTen: req.usuario.codTen,
-          codCar: BigInt(codCar),
-          nome: dados.nome ?? `Modelo 360 — ${cargo.nomeCar}`,
+          nome: dados.nome,
+          codEmp: dados.codEmp ?? null,
+          codDep: dados.codDep ?? null,
           codUsuInc: req.usuario.codUsu,
         },
-        update: { nome: dados.nome, ativo: 'S' },
       });
-
-      const tiposInformados = new Set(dados.avaliadores.map((a) => a.tipo));
-      // Upsert dos tipos informados (ativo='S').
-      for (const a of dados.avaliadores) {
-        await tx.modeloAvaliador360.upsert({
-          where: { codMod_tipo: { codMod: modelo.codMod, tipo: a.tipo } },
-          create: {
-            codTen: req.usuario.codTen,
-            codMod: modelo.codMod,
-            tipo: a.tipo,
-            peso: a.peso,
-            obrigatorio: a.obrigatorio ? 'S' : 'N',
-          },
-          update: { peso: a.peso, obrigatorio: a.obrigatorio ? 'S' : 'N', ativo: 'S' },
-        });
-      }
-      // Soft-remove dos tipos que saíram (sem DELETE — selx_app não tem).
-      const existentes = await tx.modeloAvaliador360.findMany({ where: { codMod: modelo.codMod, ativo: 'S' } });
-      for (const e of existentes) {
-        if (!tiposInformados.has(e.tipo as (typeof TIPOS_AVALIADOR)[number])) {
-          await tx.modeloAvaliador360.update({ where: { codModAval: e.codModAval }, data: { ativo: 'N' } });
-        }
-      }
+      await this.sincronizarModelo(tx, req.usuario.codTen, modelo.codMod, dados);
       return { ok: true, codMod: modelo.codMod };
     });
+  }
+
+  @Put('modelos-360/:codMod')
+  @Permissoes('gestaopessoas.avaliacoes.criar')
+  async atualizarModelo(@Req() req: ReqAut, @Param('codMod') codMod: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaModelo, corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const m = await tx.modeloAvaliacao360.findFirst({ where: { codMod: BigInt(codMod), ativo: 'S' } });
+      if (!m) throw new NotFoundException('Modelo inexistente neste tenant');
+      await tx.modeloAvaliacao360.update({
+        where: { codMod: m.codMod },
+        data: { nome: dados.nome, codEmp: dados.codEmp ?? null, codDep: dados.codDep ?? null },
+      });
+      await this.sincronizarModelo(tx, req.usuario.codTen, m.codMod, dados);
+      return { ok: true, codMod: m.codMod };
+    });
+  }
+
+  @Patch('modelos-360/:codMod/remover')
+  @Permissoes('gestaopessoas.avaliacoes.criar')
+  async removerModelo(@Req() req: ReqAut, @Param('codMod') codMod: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const m = await tx.modeloAvaliacao360.findFirst({ where: { codMod: BigInt(codMod) } });
+      if (!m) throw new NotFoundException('Modelo inexistente neste tenant');
+      await tx.modeloAvaliacao360.update({ where: { codMod: m.codMod }, data: { ativo: 'N' } });
+      return { ok: true };
+    });
+  }
+
+  /** Sincroniza avaliadores (soft-remove) e alvos de um modelo. */
+  private async sincronizarModelo(
+    tx: Parameters<Parameters<PrismaService['executarNoTenant']>[1]>[0],
+    codTen: bigint,
+    codMod: bigint,
+    dados: z.infer<typeof esquemaModelo>,
+  ) {
+    const tiposInformados = new Set(dados.avaliadores.map((a) => a.tipo));
+    for (const a of dados.avaliadores) {
+      await tx.modeloAvaliador360.upsert({
+        where: { codMod_tipo: { codMod, tipo: a.tipo } },
+        create: { codTen, codMod, tipo: a.tipo, peso: a.peso, obrigatorio: a.obrigatorio ? 'S' : 'N' },
+        update: { peso: a.peso, obrigatorio: a.obrigatorio ? 'S' : 'N', ativo: 'S' },
+      });
+    }
+    const existentes = await tx.modeloAvaliador360.findMany({ where: { codMod, ativo: 'S' } });
+    for (const e of existentes) {
+      if (!tiposInformados.has(e.tipo as (typeof TIPOS_AVALIADOR)[number])) {
+        await tx.modeloAvaliador360.update({ where: { codModAval: e.codModAval }, data: { ativo: 'N' } });
+      }
+    }
+    // Alvos (colaboradores): soft-remove todos e reativa/insere os informados.
+    await tx.modeloAlvo360.updateMany({ where: { codMod, ativo: 'S' }, data: { ativo: 'N' } });
+    for (const codFun of dados.colaboradores) {
+      await tx.modeloAlvo360.upsert({
+        where: { codMod_codFun: { codMod, codFun } },
+        create: { codTen, codMod, codFun },
+        update: { ativo: 'S' },
+      });
+    }
+  }
+
+  /**
+   * Modelo 360 aplicável a um funcionário, pela precedência de escopo:
+   * colaborador-alvo › departamento › empresa › padrão do tenant (ambos nulos).
+   * Retorna o modelo mais específico ou null (→ avaliador único).
+   */
+  static async modeloAplicavel(
+    tx: Parameters<Parameters<PrismaService['executarNoTenant']>[1]>[0],
+    fun: { codFun: bigint; codEmp: bigint | null; codDep: bigint | null },
+  ) {
+    const modelos = await tx.modeloAvaliacao360.findMany({
+      where: { ativo: 'S' },
+      orderBy: { codMod: 'desc' },
+      select: {
+        codMod: true,
+        codEmp: true,
+        codDep: true,
+        alvos: { where: { ativo: 'S' }, select: { codFun: true } },
+        avaliadores: { where: { ativo: 'S' }, select: { tipo: true, peso: true } },
+      },
+    });
+    const pontua = (m: (typeof modelos)[number]): number => {
+      if (m.alvos.some((a) => a.codFun === fun.codFun)) return 3; // alvo específico
+      if (m.codDep !== null && m.codDep === fun.codDep) return 2; // departamento
+      if (m.codEmp !== null && m.codEmp === fun.codEmp && m.codDep === null) return 1; // empresa
+      // "tudo nulo" só é padrão do tenant se NÃO for um modelo de alvos específicos —
+      // senão um modelo mirado em pessoas vazaria para todo mundo.
+      if (m.codEmp === null && m.codDep === null && m.alvos.length === 0) return 0;
+      return -1; // escopo não cobre este funcionário
+    };
+    let escolhido: (typeof modelos)[number] | null = null;
+    let melhor = -1;
+    for (const m of modelos) {
+      const p = pontua(m);
+      if (p > melhor) {
+        melhor = p;
+        escolhido = m;
+      }
+    }
+    return escolhido && escolhido.avaliadores.length > 0 ? escolhido : null;
   }
 
   // ---- Competências esperadas do cargo (role-fit) ----
