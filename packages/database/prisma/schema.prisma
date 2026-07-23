@@ -66,6 +66,8 @@ model Tenant {
   favoritas      CandidaturaFavorita[]
   filtrosSalvos  FiltroSalvo[]
   propostas      Proposta[]
+  planos         PlanoDesenvolvimento[]
+  acoesDesenv    AcaoDesenvolvimento[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -206,6 +208,7 @@ model Funcionario {
   contratoServico ContratoServico?       @relation(fields: [codContrato], references: [codContrato])
   usuario         Usuario?
   historicos      FuncionarioHistorico[]
+  planos          PlanoDesenvolvimento[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -280,6 +283,7 @@ model Usuario {
   sessoes     Sessao[]
   vagasResp   Vaga[]         @relation("VagaResponsavel")
   entrevistas Entrevista[]   @relation("EntrevistaEntrevistador")
+  pdisResp    PlanoDesenvolvimento[] @relation("PdiResponsavel")
   favoritas   CandidaturaFavorita[]
   filtrosSalvos FiltroSalvo[]
 
@@ -833,6 +837,73 @@ model RespostaCultural {
   @@unique([codCand, codCulPer])
   @@index([codTen, codCand])
   @@map("TRECULRESP")
+}
+
+// ===== Gestão de Pessoas — Fase 2: Desempenho e Desenvolvimento (TGP) =====
+// PDI, treinamentos, feedbacks e avaliação de desempenho do funcionário, da
+// entrada em diante. NUNCA cálculo de folha (RN-GP-020, decisão do Thadeu) —
+// folha é o módulo TAF, separado.
+
+/// Plano de Desenvolvimento Individual (RN-GP-020).
+///
+/// Nasce colado à admissão: o funcionário admitido já entra com um plano, em
+/// vez de esperar meses por uma primeira conversa de desenvolvimento. Aponta
+/// para `TFPFUN` (Core) sem duplicar dado de cadastro.
+model PlanoDesenvolvimento {
+  codPdi     BigInt    @id @default(autoincrement()) @map("CODPDI")
+  codTen     BigInt    @map("CODTEN")
+  codFun     BigInt    @map("CODFUN")
+  titulo     String    @map("TITULO")
+  objetivo   String?   @map("OBJETIVO") @db.Text
+  /// Quem conduz o plano — FK p/ TSIUSU, o gestor/RH responsável.
+  codUsuResp BigInt?   @map("CODUSURESP")
+  dtInicio   DateTime  @default(now()) @map("DTINICIO") @db.Date
+  dtRevisao  DateTime? @map("DTREVISAO") @db.Date
+  /// RASCUNHO | ATIVO | CONCLUIDO | CANCELADO
+  status     String    @default("ATIVO") @map("STATUS")
+  dhInc      DateTime  @default(now()) @map("DHINC")
+  codUsuInc  BigInt?   @map("CODUSUINC")
+  dhAlt      DateTime  @updatedAt @map("DHALT")
+  codUsuAlt  BigInt?   @map("CODUSUALT")
+
+  tenant      Tenant       @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario  @relation(fields: [codFun], references: [codFun])
+  responsavel Usuario?     @relation("PdiResponsavel", fields: [codUsuResp], references: [codUsu])
+  acoes       AcaoDesenvolvimento[]
+
+  @@index([codTen, codFun])
+  @@map("TGPPDI")
+}
+
+/// Ação de desenvolvimento dentro do PDI (RN-GP-020).
+///
+/// A unidade concreta do plano: um treinamento, uma leitura, um projeto, uma
+/// mentoria. O plano é a intenção; as ações são o que de fato se faz e se
+/// acompanha.
+model AcaoDesenvolvimento {
+  codAcao      BigInt    @id @default(autoincrement()) @map("CODACAO")
+  codTen       BigInt    @map("CODTEN")
+  codPdi       BigInt    @map("CODPDI")
+  descricao    String    @map("DESCRICAO")
+  /// TREINAMENTO | LEITURA | PROJETO | MENTORIA | CERTIFICACAO | OUTRO
+  tipo         String    @default("TREINAMENTO") @map("TIPO")
+  competencia  String?   @map("COMPETENCIA")
+  prazo        DateTime? @map("PRAZO") @db.Date
+  /// PENDENTE | EM_ANDAMENTO | CONCLUIDA | CANCELADA
+  status       String    @default("PENDENTE") @map("STATUS")
+  /// 0 a 100 — andamento auto-informado, para acompanhar sem binário.
+  progresso    Int       @default(0) @map("PROGRESSO")
+  dhConclusao  DateTime? @map("DHCONCLUSAO")
+  ordem        Int       @default(0) @map("ORDEM")
+  dhInc        DateTime  @default(now()) @map("DHINC")
+  codUsuInc    BigInt?   @map("CODUSUINC")
+  dhAlt        DateTime  @updatedAt @map("DHALT")
+
+  tenant Tenant               @relation(fields: [codTen], references: [codTen])
+  plano  PlanoDesenvolvimento @relation(fields: [codPdi], references: [codPdi])
+
+  @@index([codTen, codPdi])
+  @@map("TGPACAO")
 }
 
 /// Proposta ao candidato (RN-REC-018).

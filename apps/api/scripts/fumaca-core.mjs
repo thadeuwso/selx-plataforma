@@ -1816,6 +1816,65 @@ verificar(
 const acompInvalido = await http("GET", "/acompanhamento/publico/token-inexistente-abc");
 verificar("token de acompanhamento inválido → 400", acompInvalido.status === 400);
 
+// 30. Gestão de Pessoas fase 2 — PDI e desenvolvimento (RN-GP-020)
+const funPdi = await http("POST", "/funcionarios", {
+  codEmp: cadA.json?.codEmp, numCad: 7001, nomeFun: "Funcionário PDI",
+  dtAdm: "2026-08-01", tipoContrato: "CLT",
+}, tokenA2);
+verificar("cria funcionário p/ teste de PDI (201)", funPdi.status === 201);
+
+const pdi = await http("POST", "/gestao-pessoas/pdi", {
+  codFun: funPdi.json?.codFun, titulo: "Integração e primeiros 90 dias",
+  objetivo: "Autonomia na rotina do time até o fim do período de experiência",
+}, tokenA2);
+verificar("cria plano de desenvolvimento (201)", pdi.status === 201 && pdi.json?.status === "ATIVO");
+verificar(
+  "plano sem funcionário válido é recusado → 400",
+  (await http("POST", "/gestao-pessoas/pdi", { codFun: 999999, titulo: "X" }, tokenA2)).status === 400,
+);
+
+const acao1 = await http("POST", `/gestao-pessoas/pdi/${pdi.json?.codPdi}/acoes`, {
+  descricao: "Treinamento de onboarding", tipo: "TREINAMENTO", competencia: "Processos internos",
+}, tokenA2);
+const acao2 = await http("POST", `/gestao-pessoas/pdi/${pdi.json?.codPdi}/acoes`, {
+  descricao: "Ler a documentação da arquitetura", tipo: "LEITURA",
+}, tokenA2);
+verificar("adiciona ações ao plano (201)", acao1.status === 201 && acao2.status === 201);
+
+const pdiVazio = await http("GET", `/gestao-pessoas/pdi/${pdi.json?.codPdi}`, null, tokenA2);
+verificar("plano recém-criado começa com progresso 0", pdiVazio.json?.progresso === 0 && pdiVazio.json?.acoes?.length === 2);
+
+await http("PATCH", `/gestao-pessoas/pdi/acoes/${acao1.json?.codAcao}`, { progresso: 50, status: "EM_ANDAMENTO" }, tokenA2);
+const pdiMeio = await http("GET", `/gestao-pessoas/pdi/${pdi.json?.codPdi}`, null, tokenA2);
+verificar("progresso do plano é a média das ações (25)", pdiMeio.json?.progresso === 25);
+
+const concluida = await http("PATCH", `/gestao-pessoas/pdi/acoes/${acao1.json?.codAcao}`, { status: "CONCLUIDA" }, tokenA2);
+verificar(
+  "concluir a ação leva o progresso a 100 e carimba a data",
+  concluida.json?.progresso === 100 && !!concluida.json?.dhConclusao,
+);
+verificar(
+  "com uma ação concluída (100) e outra pendente (0), plano fica em 50",
+  (await http("GET", `/gestao-pessoas/pdi/${pdi.json?.codPdi}`, null, tokenA2)).json?.progresso === 50,
+);
+
+// Cancelar a pendente tira ela da conta: plano passa a refletir só a concluída.
+await http("PATCH", `/gestao-pessoas/pdi/acoes/${acao2.json?.codAcao}`, { status: "CANCELADA" }, tokenA2);
+verificar(
+  "ação cancelada sai do cálculo — plano fica em 100",
+  (await http("GET", `/gestao-pessoas/pdi/${pdi.json?.codPdi}`, null, tokenA2)).json?.progresso === 100,
+);
+
+const listaPdi = await http("GET", `/gestao-pessoas/pdi?codFun=${funPdi.json?.codFun}`, null, tokenA2);
+verificar(
+  "lista traz o plano do funcionário com o resumo de progresso",
+  listaPdi.json?.length === 1 && listaPdi.json[0].totalAcoes === 2 && listaPdi.json[0].acoesConcluidas === 1,
+);
+verificar(
+  "tenant B não vê o PDI do tenant A → 400",
+  (await http("GET", `/gestao-pessoas/pdi/${pdi.json?.codPdi}`, null, tokenB)).status === 400,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

@@ -4,6 +4,7 @@ import { BancoPerguntasController } from './banco-perguntas.controller';
 import { AvaliacaoComportamentalPublicoController } from './avaliacao-comportamental-publico.controller';
 import { PerfilComportamentalController } from './perfil-comportamental.controller';
 import { PerfilComportamentalPadraoController } from './perfil-comportamental-padrao.controller';
+import { PdiController } from './pdi.controller';
 
 @Module({
   controllers: [
@@ -12,6 +13,7 @@ import { PerfilComportamentalPadraoController } from './perfil-comportamental-pa
     PerfilComportamentalPadraoController,
     AvaliacaoComportamentalController,
     AvaliacaoComportamentalPublicoController,
+    PdiController,
   ],
 })
 export class GestaoPessoasModule {}
