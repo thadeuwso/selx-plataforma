@@ -5,7 +5,7 @@ import { CiclosDesempenho } from "@/componentes/ciclos-desempenho";
 import { DesempenhoVisaoGeral } from "@/componentes/desempenho-visao-geral";
 
 export default function PaginaDesempenho() {
-  const [aba, setAba] = useState("ciclos");
+  const [aba, setAba] = useState("visao");
 
   return (
     <main style={{ padding: 32, maxWidth: 1000 }}>
@@ -14,12 +14,12 @@ export default function PaginaDesempenho() {
         ativa={aba}
         aoMudar={setAba}
         abas={[
-          { id: "ciclos", rotulo: "Avaliação de desempenho" },
           { id: "visao", rotulo: "Visão geral" },
+          { id: "ciclos", rotulo: "Avaliação de desempenho" },
         ]}
       />
       <div style={{ marginTop: 24 }}>
-        {aba === "ciclos" ? <CiclosDesempenho /> : <DesempenhoVisaoGeral />}
+        {aba === "visao" ? <DesempenhoVisaoGeral /> : <CiclosDesempenho />}
       </div>
     </main>
   );
