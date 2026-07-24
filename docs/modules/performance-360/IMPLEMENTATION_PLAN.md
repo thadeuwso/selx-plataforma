@@ -6,8 +6,8 @@
 
 Estado atual: **Fases 1–5 entregues.** 4 (Visão 360 + `ProximaAcao`, mig 0033), 5a (360 por cargo: modelo/participantes/consolidação, mig 0034), **5b** (role-fit `CompetenciaCargo`/`situacaoAderenciaCargo`, heatmap, gaveta de detalhe da competência, config de esperadas por cargo; mig 0035).
 5c reescopou o modelo 360 (empresa/departamento/colaboradores + cargo; migs 0036/0037/0038). Role-fit na tela "Competências do cargo". **Fase 6 entregue:** metas (`Meta`/`ProgressoMeta`, status derivado, resumo ponderado, trilha de progresso, aba Metas) + feedbacks (reuso na aba Feedbacks); mig 0041.
-**Fase 7 entregue:** treinamentos/LMS (`Treinamento`/`MatriculaTreinamento`; status VENCIDO derivado; IA recomenda mas não matricula; catálogo + aba Treinamentos; mig 0042).
-**Próxima: Fase 8 (perfil comportamental, aderência ao cargo já feita, potencial/sucessão).**
+Fase 7 = treinamentos/LMS (mig 0042). **Fase 8 entregue:** perfil comportamental (ponte só-leitura com o recrutamento + aviso metodológico) + potencial 9-box (`AvaliacaoPotencial`, `quadrante9box`, rascunho→revisão humana, campos de sucessão; mig 0043).
+**Próxima: Fase 9 (IA de desempenho — resumo executivo, roteiro de feedback, sugestões — pelo gateway ADR-0003).**
 
 ---
 
