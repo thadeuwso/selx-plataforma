@@ -168,6 +168,12 @@ export class Colaborador360Controller {
         hoje,
       );
 
+      // Auditoria de leitura (§33): quem abriu o painel de quem, e quando. O
+      // painel expõe dados sensíveis de pessoas — ver deixa rastro.
+      await tx.logAuditoria.create({
+        data: { codTen: req.usuario.codTen, nomeTab: 'PAINEL360', codReg: codFun, operacao: 'VISUALIZACAO', origem: 'desempenho.360', codUsuAlt: req.usuario.codUsu },
+      });
+
       return {
         colaborador: {
           codFun: funcionario.codFun,
@@ -580,6 +586,38 @@ export class Colaborador360Controller {
         esperado,
         acoesRelacionadas: acoes,
       };
+    });
+  }
+
+  /**
+   * Trilha de auditoria do painel (RN-GP-034): quem viu, gerou IA ou exportou os
+   * dados deste colaborador, e quando. Só leitura — o auditor acompanha, não altera.
+   */
+  @Get(':codFun/auditoria')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async auditoria(@Req() req: ReqAut, @Param('codFun') codFunParam: string) {
+    const codFun = BigInt(codFunParam);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const logs = await tx.logAuditoria.findMany({
+        where: { nomeTab: 'PAINEL360', codReg: codFun },
+        orderBy: { codAud: 'desc' },
+        take: 100,
+        select: { codAud: true, operacao: true, origem: true, dadosNovos: true, dhAlt: true, codUsuAlt: true },
+      });
+      // Nomes dos usuários numa consulta só (LogAuditoria não tem relação com Usuario).
+      const codUsus = [...new Set(logs.map((l) => l.codUsuAlt).filter((c): c is bigint => c != null))];
+      const usuarios = codUsus.length
+        ? await tx.usuario.findMany({ where: { codUsu: { in: codUsus } }, select: { codUsu: true, nomeUsu: true } })
+        : [];
+      const nome = new Map(usuarios.map((u) => [u.codUsu.toString(), u.nomeUsu]));
+      return logs.map((l) => ({
+        codAud: l.codAud,
+        operacao: l.operacao,
+        origem: l.origem,
+        detalhe: l.dadosNovos,
+        dhAlt: l.dhAlt,
+        usuario: l.codUsuAlt ? nome.get(l.codUsuAlt.toString()) ?? '—' : 'sistema',
+      }));
     });
   }
 }

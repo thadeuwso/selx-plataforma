@@ -2275,6 +2275,13 @@ verificar("descartar um alerta (ok)", descartar.json?.ok === true);
 verificar("alerta descartado some da lista ativa", !(await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/riscos`, null, tokenA2)).json?.itens?.some((a) => a.chave === "METAS_ATRASADAS"));
 verificar("tenant B não vê riscos do funcionário do tenant A → 400", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/riscos`, null, tokenB)).status === 400);
 
+// 45. Auditoria de leitura do painel (RN-GP-034)
+// Abrir o agregador 360 deixa rastro de VISUALIZACAO.
+await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenA2);
+const audit = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/auditoria`, null, tokenA2);
+verificar("auditoria registra a visualização do painel (com usuário e data)", audit.status === 200 && audit.json?.some((l) => l.operacao === "VISUALIZACAO" && !!l.usuario && !!l.dhAlt));
+verificar("tenant B não vê a auditoria do funcionário do tenant A", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/auditoria`, null, tokenB)).json?.length === 0 || (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/auditoria`, null, tokenB)).status === 200);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);

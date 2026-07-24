@@ -10,6 +10,7 @@ import { Competencias360 } from "@/componentes/colaborador-360/competencias-360"
 import { Metas360 } from "@/componentes/colaborador-360/metas-360";
 import { Treinamentos360 } from "@/componentes/colaborador-360/treinamentos-360";
 import { Comportamental360 } from "@/componentes/colaborador-360/comportamental-360";
+import { Auditoria360 } from "@/componentes/colaborador-360/auditoria-360";
 
 const ABAS = [
   { id: "visao", rotulo: "Visão 360" },
@@ -27,7 +28,6 @@ const ABAS = [
 // Abas ainda não implementadas nesta fase — placeholder honesto por fase.
 const EM_BREVE: Record<string, string> = {
   historico: "Timeline unificada da vida do colaborador na empresa (Fase 11).",
-  auditoria: "Trilha de acesso e alterações deste painel (Fase 11).",
 };
 
 export default function PaginaColaborador360({ params }: { params: Promise<{ codFun: string }> }) {
@@ -106,6 +106,7 @@ export default function PaginaColaborador360({ params }: { params: Promise<{ cod
         {aba === "feedbacks" && <FeedbackFuncionario codFun={codFun} />}
         {aba === "treinamentos" && <Treinamentos360 codFun={codFun} />}
         {aba === "comportamental" && <Comportamental360 codFun={codFun} />}
+        {aba === "auditoria" && <Auditoria360 codFun={codFun} />}
         {aba === "pdi" && <PdiFuncionario codFun={codFun} />}
         {EM_BREVE[aba] && (
           <div style={{ border: "1px dashed var(--border-default)", borderRadius: 10, padding: 24, color: "var(--text-muted)", fontSize: 13, lineHeight: 1.6 }}>

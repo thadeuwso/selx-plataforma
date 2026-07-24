@@ -114,15 +114,16 @@ export class IADesempenhoController {
           codUsuInc: req.usuario.codUsu,
         },
       });
-      // Auditoria da geração (§33) — quem pediu, para quem, com qual provedor.
+      // Auditoria da geração (§33) — chaveada pelo colaborador (PAINEL360) para a
+      // trilha do painel juntar visualização, exportação e IA num só lugar.
       await tx.logAuditoria.create({
         data: {
           codTen,
-          nomeTab: 'TGPIAINS',
-          codReg: s.codIaIns,
-          operacao: 'IA_GERAR',
+          nomeTab: 'PAINEL360',
+          codReg: codFun,
+          operacao: tipo === 'RESUMO_EXEC' ? 'IA_RESUMO' : 'IA_ROTEIRO',
           origem: `desempenho.ia.${tipo.toLowerCase()}`,
-          dadosNovos: { tipo, provedor: resultado.provedor, modelo: resultado.modelo, codFun: codFun.toString() } as Prisma.InputJsonValue,
+          dadosNovos: { insight: s.codIaIns.toString(), provedor: resultado.provedor, modelo: resultado.modelo } as Prisma.InputJsonValue,
           codUsuAlt: req.usuario.codUsu,
         },
       });
