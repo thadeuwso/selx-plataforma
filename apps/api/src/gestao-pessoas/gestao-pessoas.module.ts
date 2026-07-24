@@ -14,6 +14,7 @@ import { MetasController } from './metas.controller';
 import { TreinamentosController } from './treinamentos.controller';
 import { PerfilPotencialController } from './perfil-potencial.controller';
 import { IADesempenhoController } from './ia-desempenho.controller';
+import { RiscosController } from './riscos.controller';
 
 @Module({
   controllers: [
@@ -32,6 +33,7 @@ import { IADesempenhoController } from './ia-desempenho.controller';
     TreinamentosController,
     PerfilPotencialController,
     IADesempenhoController,
+    RiscosController,
   ],
 })
 export class GestaoPessoasModule {}

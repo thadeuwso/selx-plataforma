@@ -86,6 +86,7 @@ model Tenant {
   matriculas        MatriculaTreinamento[]
   avaliacoesPotencial AvaliacaoPotencial[]
   iaInsights        IADesempenhoInsight[]
+  alertas           Alerta[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -238,6 +239,7 @@ model Funcionario {
   matriculas      MatriculaTreinamento[]
   avaliacoesPotencial AvaliacaoPotencial[]
   iaInsights      IADesempenhoInsight[]
+  alertas         Alerta[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -319,6 +321,7 @@ model Usuario {
   proximasAcoesResp ProximaAcao[]       @relation("ProximaAcaoResp")
   metasResp        Meta[]              @relation("MetaResp")
   potenciaisAval   AvaliacaoPotencial[] @relation("PotencialAvaliador")
+  alertasResp      Alerta[]            @relation("AlertaResp")
   favoritas   CandidaturaFavorita[]
   filtrosSalvos FiltroSalvo[]
 
@@ -1321,6 +1324,34 @@ model IADesempenhoInsight {
 
   @@index([codTen, codFun, tipo])
   @@map("TGPIAINS")
+}
+
+/// Estado de um alerta de risco (performance-360, RN-GP-033).
+///
+/// Os alertas são DERIVADOS por regras transparentes (ver `avaliarRiscos`) — não
+/// se guardam. O que se guarda aqui é a **decisão humana** sobre cada um (por
+/// `chave` da regra): revisar, descartar, resolver — para não reaparecer depois
+/// de tratado. Enquanto não há registro, o alerta está ABERTO.
+model Alerta {
+  codAlerta  BigInt   @id @default(autoincrement()) @map("CODALERTA")
+  codTen     BigInt   @map("CODTEN")
+  codFun     BigInt   @map("CODFUN")
+  /// Chave estável da regra (ex.: QUEDA_DESEMPENHO, METAS_ATRASADAS).
+  chave      String   @map("CHAVE")
+  /// ABERTO | EM_REVISAO | DESCARTADO | RESOLVIDO
+  status     String   @default("ABERTO") @map("STATUS")
+  motivo     String?  @map("MOTIVO") @db.Text
+  codUsuResp BigInt?  @map("CODUSURESP")
+  dhInc      DateTime @default(now()) @map("DHINC")
+  dhAlt      DateTime @updatedAt @map("DHALT")
+
+  tenant      Tenant       @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario  @relation(fields: [codFun], references: [codFun])
+  responsavel Usuario?     @relation("AlertaResp", fields: [codUsuResp], references: [codUsu])
+
+  @@unique([codTen, codFun, chave])
+  @@index([codTen, codFun])
+  @@map("TGPALERTA")
 }
 
 /// Modelo de avaliação 360 com escopo (performance-360, RN-GP-025 / RN-GP-027).

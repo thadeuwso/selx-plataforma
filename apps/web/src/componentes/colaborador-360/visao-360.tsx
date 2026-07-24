@@ -6,6 +6,7 @@ import { GraficoEvolucao } from "@/componentes/colaborador-360/grafico-evolucao"
 import { ProximosPassos } from "@/componentes/colaborador-360/proximos-passos";
 import { Potencial360 } from "@/componentes/colaborador-360/potencial-360";
 import { ResumoIA } from "@/componentes/colaborador-360/resumo-ia";
+import { Riscos360 } from "@/componentes/colaborador-360/riscos-360";
 
 const NIVEL: Record<string, { texto: string; cor: string }> = {
   ADERENTE: { texto: "Aderente", cor: "var(--feedback-success, #15803d)" },
@@ -105,6 +106,9 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
           </div>
         </Cartao>
       </div>
+
+      {/* Riscos e alertas */}
+      <Riscos360 codFun={codFun} />
 
       {/* Potencial (9-box) */}
       <Potencial360 codFun={codFun} />

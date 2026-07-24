@@ -2260,6 +2260,21 @@ if (iaOk) {
 }
 verificar("tenant B não gera resumo de IA p/ colaborador do tenant A", [400, 403, 404].includes((await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, {}, tokenB)).status) || (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, null, tokenB)).json === null);
 
+// 44. Riscos e alertas por regras (RN-GP-033)
+// funPdi tem 1 meta cancelada (cancelada), 1 PDI ativo, treino obrigatório? Vamos garantir um risco: a meta atrasada.
+const metaAtras = await http("POST", "/gestao-pessoas/metas", { codFun: funPdi.json?.codFun, titulo: "Meta vencida", prazo: "2020-01-01" }, tokenA2);
+await http("POST", `/gestao-pessoas/metas/${metaAtras.json?.codMeta}/progresso`, { progresso: 20 }, tokenA2);
+const risc = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/riscos`, null, tokenA2);
+verificar("riscos: motor de regras devolve alertas com regra e evidências", risc.status === 200 && Array.isArray(risc.json?.itens) && risc.json?.itens?.every((a) => !!a.regra && Array.isArray(a.evidencias)));
+const alertaMeta = risc.json?.itens?.find((a) => a.chave === "METAS_ATRASADAS");
+verificar("meta com prazo vencido dispara alerta METAS_ATRASADAS", !!alertaMeta && alertaMeta.nivel === "MEDIO");
+verificar("cada alerta tem ação recomendada e nível", risc.json?.itens?.every((a) => !!a.acaoRecomendada && ["ALTO", "MEDIO", "BAIXO"].includes(a.nivel)));
+
+const descartar = await http("PATCH", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/riscos/METAS_ATRASADAS`, { status: "DESCARTADO", motivo: "combinado com a pessoa" }, tokenA2);
+verificar("descartar um alerta (ok)", descartar.json?.ok === true);
+verificar("alerta descartado some da lista ativa", !(await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/riscos`, null, tokenA2)).json?.itens?.some((a) => a.chave === "METAS_ATRASADAS"));
+verificar("tenant B não vê riscos do funcionário do tenant A → 400", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/riscos`, null, tokenB)).status === 400);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);
