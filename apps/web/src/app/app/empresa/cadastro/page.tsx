@@ -23,9 +23,23 @@ export default function PaginaEmpresas() {
   const [eu, setEu] = useState<Eu | null>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [aberta, setAberta] = useState(false);
+  const [editando, setEditando] = useState<Empresa | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [form, setForm] = useState({ nomeFantasia: "", razaoSocial: "", cgc: "", codEmpMatriz: "" });
+  const [form, setForm] = useState({ nomeFantasia: "", razaoSocial: "", cgc: "", codEmpMatriz: "", situacao: "ATIVA" });
+
+  function abrirNova() {
+    setEditando(null);
+    setForm({ nomeFantasia: "", razaoSocial: "", cgc: "", codEmpMatriz: "", situacao: "ATIVA" });
+    setErro(null);
+    setAberta(true);
+  }
+  function abrirEdicao(e: Empresa) {
+    setEditando(e);
+    setForm({ nomeFantasia: e.nomeFantasia, razaoSocial: e.razaoSocial, cgc: "", codEmpMatriz: e.codEmpMatriz ?? "", situacao: e.situacao });
+    setErro(null);
+    setAberta(true);
+  }
 
   const carregar = useCallback(async () => {
     const r = await api<Empresa[]>("/empresas");
@@ -48,27 +62,37 @@ export default function PaginaEmpresas() {
     e.preventDefault();
     setErro(null);
     setSalvando(true);
-    const r = await api("/empresas", {
-      metodo: "POST",
-      corpo: {
-        nomeFantasia: form.nomeFantasia,
-        razaoSocial: form.razaoSocial,
-        cgc: form.cgc || undefined,
-        codEmpMatriz: form.codEmpMatriz || undefined,
-      },
-    });
+    const r = editando
+      ? await api(`/empresas/${editando.codEmp}`, {
+          metodo: "PATCH",
+          corpo: {
+            nomeFantasia: form.nomeFantasia,
+            razaoSocial: form.razaoSocial,
+            cgc: form.cgc || undefined,
+            situacao: form.situacao,
+          },
+        })
+      : await api("/empresas", {
+          metodo: "POST",
+          corpo: {
+            nomeFantasia: form.nomeFantasia,
+            razaoSocial: form.razaoSocial,
+            cgc: form.cgc || undefined,
+            codEmpMatriz: form.codEmpMatriz || undefined,
+          },
+        });
     setSalvando(false);
-    if (r.status !== 201) {
-      setErro(r.status === 403 ? "Sem permissão para criar empresas." : "Não foi possível salvar. Verifique os dados.");
+    if (r.status !== 201 && r.status !== 200) {
+      setErro(r.status === 403 ? "Sem permissão." : "Não foi possível salvar. Verifique os dados.");
       return;
     }
     setAberta(false);
-    setForm({ nomeFantasia: "", razaoSocial: "", cgc: "", codEmpMatriz: "" });
     await carregar();
   }
 
   if (!eu) return null;
   const podeCriar = eu.permissoes.includes("core.empresas.criar");
+  const podeEditar = eu.permissoes.includes("core.empresas.editar");
 
   return (
     <main style={{ padding: 32 }}>
@@ -79,7 +103,7 @@ export default function PaginaEmpresas() {
             Olá, {eu.nome} — {empresas.length} empresa(s) no seu grupo.
           </p>
         </div>
-        {podeCriar && <BotaoPrimario onClick={() => setAberta(true)}>Nova empresa/filial</BotaoPrimario>}
+        {podeCriar && <BotaoPrimario onClick={abrirNova}>Nova empresa/filial</BotaoPrimario>}
       </header>
 
       <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflow: "hidden" }}>
@@ -90,22 +114,29 @@ export default function PaginaEmpresas() {
               <th style={{ ...celula, fontWeight: 600 }}>Nome fantasia</th>
               <th style={{ ...celula, fontWeight: 600 }}>Razão social</th>
               <th style={{ ...celula, fontWeight: 600 }}>Tipo</th>
+              <th style={{ ...celula, fontWeight: 600 }}>Situação</th>
             </tr>
           </thead>
           <tbody>
             {empresas.map((e) => (
-              <tr key={e.codEmp} style={{ borderTop: "1px solid var(--border-default)" }}>
+              <tr
+                key={e.codEmp}
+                onClick={() => podeEditar && abrirEdicao(e)}
+                style={{ borderTop: "1px solid var(--border-default)", cursor: podeEditar ? "pointer" : "default" }}
+              >
                 <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{e.codEmp}</td>
                 <td style={celula}>{e.nomeFantasia}</td>
                 <td style={{ ...celula, color: "var(--text-muted)" }}>{e.razaoSocial}</td>
                 <td style={celula}>{e.codEmpMatriz ? "Filial" : "Matriz"}</td>
+                <td style={{ ...celula, color: "var(--text-muted)" }}>{e.situacao === "ATIVA" ? "Ativa" : "Inativa"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {podeEditar && <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>Clique numa empresa para editar.</p>}
 
-      <Gaveta titulo="Nova empresa ou filial" aberta={aberta} fechar={() => setAberta(false)}>
+      <Gaveta titulo={editando ? "Editar empresa" : "Nova empresa ou filial"} aberta={aberta} fechar={() => setAberta(false)}>
         <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>
           <Campo rotulo="Nome fantasia">
             <Entrada required value={form.nomeFantasia} onChange={(e) => setForm({ ...form, nomeFantasia: e.target.value })} />
@@ -116,19 +147,28 @@ export default function PaginaEmpresas() {
           <Campo rotulo="CNPJ (opcional)">
             <Entrada value={form.cgc} onChange={(e) => setForm({ ...form, cgc: e.target.value })} />
           </Campo>
-          <Campo rotulo="Matriz (deixe vazio para criar uma matriz)">
-            <Selecao value={form.codEmpMatriz} onChange={(e) => setForm({ ...form, codEmpMatriz: e.target.value })}>
-              <option value="">— nenhuma (é matriz) —</option>
-              {empresas.filter((e) => !e.codEmpMatriz).map((e) => (
-                <option key={e.codEmp} value={e.codEmp}>
-                  {e.nomeFantasia}
-                </option>
-              ))}
-            </Selecao>
-          </Campo>
+          {editando ? (
+            <Campo rotulo="Situação">
+              <Selecao value={form.situacao} onChange={(e) => setForm({ ...form, situacao: e.target.value })}>
+                <option value="ATIVA">Ativa</option>
+                <option value="INATIVA">Inativa</option>
+              </Selecao>
+            </Campo>
+          ) : (
+            <Campo rotulo="Matriz (deixe vazio para criar uma matriz)">
+              <Selecao value={form.codEmpMatriz} onChange={(e) => setForm({ ...form, codEmpMatriz: e.target.value })}>
+                <option value="">— nenhuma (é matriz) —</option>
+                {empresas.filter((e) => !e.codEmpMatriz).map((e) => (
+                  <option key={e.codEmp} value={e.codEmp}>
+                    {e.nomeFantasia}
+                  </option>
+                ))}
+              </Selecao>
+            </Campo>
+          )}
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
-            {salvando ? "Salvando..." : "Criar empresa"}
+            {salvando ? "Salvando..." : editando ? "Salvar" : "Criar empresa"}
           </BotaoPrimario>
         </form>
       </Gaveta>

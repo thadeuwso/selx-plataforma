@@ -48,10 +48,25 @@ export default function PaginaOrganizacao() {
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
   const [gaveta, setGaveta] = useState<"cargo" | "departamento" | null>(null);
+  const [editCargo, setEditCargo] = useState<Cargo | null>(null);
+  const [editDep, setEditDep] = useState<Departamento | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [formCargo, setFormCargo] = useState({ nomeCar: "", cbo: "" });
   const [formDep, setFormDep] = useState({ descrDep: "", codDepPai: "" });
+
+  function abrirCargo(c?: Cargo) {
+    setEditCargo(c ?? null);
+    setFormCargo({ nomeCar: c?.nomeCar ?? "", cbo: c?.cbo ?? "" });
+    setErro(null);
+    setGaveta("cargo");
+  }
+  function abrirDep(d?: Departamento) {
+    setEditDep(d ?? null);
+    setFormDep({ descrDep: d?.descrDep ?? "", codDepPai: d?.codDepPai ?? "" });
+    setErro(null);
+    setGaveta("departamento");
+  }
 
   const carregar = useCallback(async () => {
     const [c, d] = await Promise.all([api<Cargo[]>("/cargos"), api<Departamento[]>("/departamentos")]);
@@ -69,16 +84,14 @@ export default function PaginaOrganizacao() {
     setSalvando(true);
     const r =
       gaveta === "cargo"
-        ? await api("/cargos", {
-            metodo: "POST",
-            corpo: { nomeCar: formCargo.nomeCar, cbo: formCargo.cbo || undefined },
-          })
-        : await api("/departamentos", {
-            metodo: "POST",
-            corpo: { descrDep: formDep.descrDep, codDepPai: formDep.codDepPai || undefined },
-          });
+        ? editCargo
+          ? await api(`/cargos/${editCargo.codCar}`, { metodo: "PATCH", corpo: { nomeCar: formCargo.nomeCar, cbo: formCargo.cbo || undefined } })
+          : await api("/cargos", { metodo: "POST", corpo: { nomeCar: formCargo.nomeCar, cbo: formCargo.cbo || undefined } })
+        : editDep
+          ? await api(`/departamentos/${editDep.codDep}`, { metodo: "PATCH", corpo: { descrDep: formDep.descrDep, codDepPai: formDep.codDepPai || null } })
+          : await api("/departamentos", { metodo: "POST", corpo: { descrDep: formDep.descrDep, codDepPai: formDep.codDepPai || undefined } });
     setSalvando(false);
-    if (r.status !== 201) {
+    if (r.status !== 201 && r.status !== 200) {
       setErro(r.status === 403 ? "Sem permissão (core.funcionarios.editar)." : "Não foi possível salvar — nomes são únicos.");
       return;
     }
@@ -108,7 +121,7 @@ export default function PaginaOrganizacao() {
           <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
             Estrutura hierárquica — espelho da TFPDEP do Sankhya.
           </p>
-          <BotaoPrimario onClick={() => setGaveta("departamento")}>Novo departamento</BotaoPrimario>
+          <BotaoPrimario onClick={() => abrirDep()}>Novo departamento</BotaoPrimario>
         </header>
         <div style={caixa}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -121,7 +134,7 @@ export default function PaginaOrganizacao() {
             </thead>
             <tbody>
               {departamentos.map((d) => (
-                <tr key={d.codDep} style={{ borderTop: "1px solid var(--border-default)" }}>
+                <tr key={d.codDep} onClick={() => abrirDep(d)} style={{ borderTop: "1px solid var(--border-default)", cursor: "pointer" }}>
                   <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{d.codDep}</td>
                   <td style={celula}>
                     <span style={{ paddingLeft: (d.grau - 1) * 18 }}>{d.grau > 1 ? "└ " : ""}{d.descrDep}</span>
@@ -148,7 +161,7 @@ export default function PaginaOrganizacao() {
           <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
             Espelho da TFPCAR do Sankhya.
           </p>
-          <BotaoPrimario onClick={() => setGaveta("cargo")}>Novo cargo</BotaoPrimario>
+          <BotaoPrimario onClick={() => abrirCargo()}>Novo cargo</BotaoPrimario>
         </header>
         <div style={caixa}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -161,7 +174,7 @@ export default function PaginaOrganizacao() {
             </thead>
             <tbody>
               {cargos.map((c) => (
-                <tr key={c.codCar} style={{ borderTop: "1px solid var(--border-default)" }}>
+                <tr key={c.codCar} onClick={() => abrirCargo(c)} style={{ borderTop: "1px solid var(--border-default)", cursor: "pointer" }}>
                   <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{c.codCar}</td>
                   <td style={celula}>{c.nomeCar}</td>
                   <td style={{ ...celula, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{c.cbo ?? "—"}</td>
@@ -180,7 +193,7 @@ export default function PaginaOrganizacao() {
       </section>
       )}
 
-      <Gaveta titulo="Novo departamento" aberta={gaveta === "departamento"} fechar={() => setGaveta(null)}>
+      <Gaveta titulo={editDep ? "Editar departamento" : "Novo departamento"} aberta={gaveta === "departamento"} fechar={() => setGaveta(null)}>
         <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>
           <Campo rotulo="Descrição">
             <Entrada required value={formDep.descrDep} onChange={(e) => setFormDep({ ...formDep, descrDep: e.target.value })} />
@@ -188,7 +201,7 @@ export default function PaginaOrganizacao() {
           <Campo rotulo="Departamento pai (opcional)">
             <Selecao value={formDep.codDepPai} onChange={(e) => setFormDep({ ...formDep, codDepPai: e.target.value })}>
               <option value="">— raiz —</option>
-              {departamentos.map((d) => (
+              {departamentos.filter((d) => d.codDep !== editDep?.codDep).map((d) => (
                 <option key={d.codDep} value={d.codDep}>
                   {d.descrDep}
                 </option>
@@ -197,12 +210,12 @@ export default function PaginaOrganizacao() {
           </Campo>
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
-            {salvando ? "Salvando..." : "Criar departamento"}
+            {salvando ? "Salvando..." : editDep ? "Salvar" : "Criar departamento"}
           </BotaoPrimario>
         </form>
       </Gaveta>
 
-      <Gaveta titulo="Novo cargo" aberta={gaveta === "cargo"} fechar={() => setGaveta(null)}>
+      <Gaveta titulo={editCargo ? "Editar cargo" : "Novo cargo"} aberta={gaveta === "cargo"} fechar={() => setGaveta(null)}>
         <form onSubmit={salvar} style={{ display: "grid", gap: 14 }}>
           <Campo rotulo="Nome do cargo">
             <Entrada required value={formCargo.nomeCar} onChange={(e) => setFormCargo({ ...formCargo, nomeCar: e.target.value })} />
@@ -212,7 +225,7 @@ export default function PaginaOrganizacao() {
           </Campo>
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
-            {salvando ? "Salvando..." : "Criar cargo"}
+            {salvando ? "Salvando..." : editCargo ? "Salvar" : "Criar cargo"}
           </BotaoPrimario>
         </form>
       </Gaveta>

@@ -1838,6 +1838,23 @@ const histFun = await http("GET", `/funcionarios/${funEdit.json?.codFun}/histori
 verificar("mudança de cargo virou evento no histórico (TFPFUNHIS)", histFun.json?.some((h) => h.tipoMud === "CARGO" && h.valorNovo === "Cargo Editado"));
 verificar("tenant B não edita funcionário do tenant A → 404", (await http("PATCH", `/funcionarios/${funEdit.json?.codFun}`, { nomeFun: "hack" }, tokenB)).status === 404);
 
+// Edição de empresa, cargo, departamento, projeto e contrato (RN-CORE-EDIT)
+verificar("edita empresa (nome + situação)", (await http("PATCH", `/empresas/${cadA.json?.codEmp}`, { nomeFantasia: "Empresa A Editada", situacao: "ATIVA" }, tokenA2)).json?.ok === true);
+verificar("empresa editada persiste", (await http("GET", "/empresas", null, tokenA2)).json?.some((e) => String(e.codEmp) === String(cadA.json?.codEmp) && e.nomeFantasia === "Empresa A Editada"));
+verificar("edita cargo (nome)", (await http("PATCH", `/cargos/${cargoEdit.json?.codCar}`, { nomeCar: "Cargo Reeditado" }, tokenA2)).json?.ok === true);
+verificar("cargo editado persiste", (await http("GET", "/cargos", null, tokenA2)).json?.some((c) => String(c.codCar) === String(cargoEdit.json?.codCar) && c.nomeCar === "Cargo Reeditado"));
+const depEdit = await http("POST", "/departamentos", { descrDep: "Depto Original" }, tokenA2);
+verificar("edita departamento (descrição)", (await http("PATCH", `/departamentos/${depEdit.json?.codDep}`, { descrDep: "Depto Renomeado" }, tokenA2)).json?.ok === true);
+verificar("departamento editado persiste", (await http("GET", "/departamentos", null, tokenA2)).json?.some((d) => String(d.codDep) === String(depEdit.json?.codDep) && d.descrDep === "Depto Renomeado"));
+const projEdit = await http("POST", "/projetos", { identificacao: "Projeto Original", abreviatura: "PROJ1" }, tokenA2);
+verificar("edita projeto (identificação + orçado)", (await http("PATCH", `/projetos/${projEdit.json?.codProj}`, { identificacao: "Projeto Editado", vlrOrcado: 5000 }, tokenA2)).json?.ok === true);
+const projLista = await http("GET", "/projetos", null, tokenA2);
+verificar("projeto editado persiste", projLista.json?.some((p) => String(p.codProj) === String(projEdit.json?.codProj) && p.identificacao === "Projeto Editado"));
+const contrEdit = await http("POST", "/contratos-servico", { descrContrato: "Contrato Original" }, tokenA2);
+verificar("edita contrato (descrição + valor/hora)", (await http("PATCH", `/contratos-servico/${contrEdit.json?.codContrato}`, { descrContrato: "Contrato Editado", vlrHora: 120 }, tokenA2)).json?.ok === true);
+verificar("contrato editado persiste", (await http("GET", "/contratos-servico", null, tokenA2)).json?.some((c) => String(c.codContrato) === String(contrEdit.json?.codContrato) && c.descrContrato === "Contrato Editado"));
+verificar("tenant B não edita empresa do tenant A → 404", (await http("PATCH", `/empresas/${cadA.json?.codEmp}`, { nomeFantasia: "hack" }, tokenB)).status === 404);
+
 const pdi = await http("POST", "/gestao-pessoas/pdi", {
   codFun: funPdi.json?.codFun, titulo: "Integração e primeiros 90 dias",
   objetivo: "Autonomia na rotina do time até o fim do período de experiência",

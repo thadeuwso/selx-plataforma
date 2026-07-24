@@ -14,6 +14,7 @@ interface Projeto {
   identificacao: string;
   abreviatura: string;
   codProjPai: string | null;
+  codEmp: string | null;
   grau: number;
   dtInicio: string | null;
   dtTermino: string | null;
@@ -25,6 +26,7 @@ interface Contrato {
   descrContrato: string;
   numContrato: string | null;
   codProj: string | null;
+  codEmp: string | null;
   tipo: string | null;
   vlrHora: string | null;
   parcelaQtd: number | null;
@@ -48,6 +50,8 @@ export default function PaginaProjetos() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [gavetaProj, setGavetaProj] = useState(false);
   const [gavetaContr, setGavetaContr] = useState(false);
+  const [editProj, setEditProj] = useState<Projeto | null>(null);
+  const [editContr, setEditContr] = useState<Contrato | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -57,6 +61,27 @@ export default function PaginaProjetos() {
   const [formContr, setFormContr] = useState({
     descrContrato: "", numContrato: "", codProj: "", codEmp: "", tipo: "M", vlrHora: "", parcelaQtd: "", dtTermino: "",
   });
+
+  const dInput = (v: string | null) => (v ? new Date(v).toISOString().slice(0, 10) : "");
+
+  function abrirProj(p?: Projeto) {
+    setEditProj(p ?? null);
+    setErro(null);
+    setFormProj({
+      identificacao: p?.identificacao ?? "", abreviatura: p?.abreviatura ?? "", codProjPai: p?.codProjPai ?? "",
+      codEmp: p?.codEmp ?? "", dtInicio: dInput(p?.dtInicio ?? null), dtTermino: dInput(p?.dtTermino ?? null), vlrOrcado: p?.vlrOrcado ?? "",
+    });
+    setGavetaProj(true);
+  }
+  function abrirContr(c?: Contrato) {
+    setEditContr(c ?? null);
+    setErro(null);
+    setFormContr({
+      descrContrato: c?.descrContrato ?? "", numContrato: c?.numContrato ?? "", codProj: c?.codProj ?? "", codEmp: c?.codEmp ?? "",
+      tipo: c?.tipo ?? "M", vlrHora: c?.vlrHora ?? "", parcelaQtd: c?.parcelaQtd != null ? String(c.parcelaQtd) : "", dtTermino: dInput(c?.dtTermino ?? null),
+    });
+    setGavetaContr(true);
+  }
 
   const carregar = useCallback(async () => {
     const [p, c, e] = await Promise.all([
@@ -77,21 +102,21 @@ export default function PaginaProjetos() {
     e.preventDefault();
     setErro(null);
     setSalvando(true);
-    const r = await api("/projetos", {
-      metodo: "POST",
-      corpo: {
-        identificacao: formProj.identificacao,
-        abreviatura: formProj.abreviatura,
-        codProjPai: formProj.codProjPai || undefined,
-        codEmp: formProj.codEmp || undefined,
-        dtInicio: formProj.dtInicio || undefined,
-        dtTermino: formProj.dtTermino || undefined,
-        vlrOrcado: formProj.vlrOrcado ? Number(formProj.vlrOrcado) : undefined,
-      },
-    });
+    const corpo = {
+      identificacao: formProj.identificacao,
+      abreviatura: formProj.abreviatura,
+      codProjPai: formProj.codProjPai || (editProj ? null : undefined),
+      codEmp: formProj.codEmp || (editProj ? null : undefined),
+      dtInicio: formProj.dtInicio || (editProj ? null : undefined),
+      dtTermino: formProj.dtTermino || (editProj ? null : undefined),
+      vlrOrcado: formProj.vlrOrcado ? Number(formProj.vlrOrcado) : (editProj ? null : undefined),
+    };
+    const r = editProj
+      ? await api(`/projetos/${editProj.codProj}`, { metodo: "PATCH", corpo })
+      : await api("/projetos", { metodo: "POST", corpo });
     setSalvando(false);
-    if (r.status !== 201) {
-      setErro(r.status === 403 ? "Sem permissão (core.funcionarios.editar)." : "Não foi possível criar o projeto.");
+    if (r.status !== 201 && r.status !== 200) {
+      setErro(r.status === 403 ? "Sem permissão (core.funcionarios.editar)." : "Não foi possível salvar o projeto.");
       return;
     }
     setGavetaProj(false);
@@ -103,22 +128,23 @@ export default function PaginaProjetos() {
     e.preventDefault();
     setErro(null);
     setSalvando(true);
-    const r = await api("/contratos-servico", {
-      metodo: "POST",
-      corpo: {
-        descrContrato: formContr.descrContrato,
-        numContrato: formContr.numContrato || undefined,
-        codProj: formContr.codProj || undefined,
-        codEmp: formContr.codEmp || undefined,
-        tipo: formContr.tipo || undefined,
-        vlrHora: formContr.vlrHora ? Number(formContr.vlrHora) : undefined,
-        parcelaQtd: formContr.parcelaQtd ? Number(formContr.parcelaQtd) : undefined,
-        dtTermino: formContr.dtTermino || undefined,
-      },
-    });
+    const nada = editContr ? null : undefined;
+    const corpo = {
+      descrContrato: formContr.descrContrato,
+      numContrato: formContr.numContrato || nada,
+      codProj: formContr.codProj || nada,
+      codEmp: formContr.codEmp || nada,
+      tipo: formContr.tipo || undefined,
+      vlrHora: formContr.vlrHora ? Number(formContr.vlrHora) : nada,
+      parcelaQtd: formContr.parcelaQtd ? Number(formContr.parcelaQtd) : nada,
+      dtTermino: formContr.dtTermino || nada,
+    };
+    const r = editContr
+      ? await api(`/contratos-servico/${editContr.codContrato}`, { metodo: "PATCH", corpo })
+      : await api("/contratos-servico", { metodo: "POST", corpo });
     setSalvando(false);
-    if (r.status !== 201) {
-      setErro(r.status === 403 ? "Sem permissão (core.funcionarios.editar)." : "Não foi possível criar o contrato.");
+    if (r.status !== 201 && r.status !== 200) {
+      setErro(r.status === 403 ? "Sem permissão (core.funcionarios.editar)." : "Não foi possível salvar o contrato.");
       return;
     }
     setGavetaContr(false);
@@ -151,7 +177,7 @@ export default function PaginaProjetos() {
       {aba === "projetos" && (
         <section style={{ marginTop: 20 }}>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <BotaoPrimario onClick={() => setGavetaProj(true)}>Novo projeto</BotaoPrimario>
+            <BotaoPrimario onClick={() => abrirProj()}>Novo projeto</BotaoPrimario>
           </div>
           <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -167,7 +193,7 @@ export default function PaginaProjetos() {
               </thead>
               <tbody>
                 {projetos.map((p) => (
-                  <tr key={p.codProj} style={{ borderTop: "1px solid var(--border-default)" }}>
+                  <tr key={p.codProj} onClick={() => abrirProj(p)} style={{ borderTop: "1px solid var(--border-default)", cursor: "pointer" }}>
                     <td style={celula}>
                       {/* Hierarquia: recua pelo grau, como no espelho do Sankhya */}
                       <span style={{ paddingLeft: (p.grau - 1) * 16 }}>
@@ -208,7 +234,7 @@ export default function PaginaProjetos() {
       {aba === "contratos" && (
         <section style={{ marginTop: 20 }}>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <BotaoPrimario onClick={() => setGavetaContr(true)}>Novo contrato</BotaoPrimario>
+            <BotaoPrimario onClick={() => abrirContr()}>Novo contrato</BotaoPrimario>
           </div>
           <div style={{ background: "var(--surface-default)", border: "1px solid var(--border-default)", borderRadius: 10, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -224,7 +250,7 @@ export default function PaginaProjetos() {
               </thead>
               <tbody>
                 {contratos.map((c) => (
-                  <tr key={c.codContrato} style={{ borderTop: "1px solid var(--border-default)" }}>
+                  <tr key={c.codContrato} onClick={() => abrirContr(c)} style={{ borderTop: "1px solid var(--border-default)", cursor: "pointer" }}>
                     <td style={celula}>{c.descrContrato}</td>
                     <td style={{ ...celula, fontFamily: "var(--font-mono)", fontSize: 12 }}>{c.numContrato ?? "—"}</td>
                     <td style={{ ...celula, color: "var(--text-muted)" }}>{nomeProjeto(c.codProj)}</td>
@@ -246,7 +272,7 @@ export default function PaginaProjetos() {
         </section>
       )}
 
-      <Gaveta titulo="Novo projeto" aberta={gavetaProj} fechar={() => setGavetaProj(false)}>
+      <Gaveta titulo={editProj ? "Editar projeto" : "Novo projeto"} aberta={gavetaProj} fechar={() => setGavetaProj(false)}>
         <form onSubmit={salvarProjeto} style={{ display: "grid", gap: 14 }}>
           <Campo rotulo="Identificação">
             <Entrada required value={formProj.identificacao} onChange={(e) => setFormProj({ ...formProj, identificacao: e.target.value })} />
@@ -257,7 +283,7 @@ export default function PaginaProjetos() {
           <Campo rotulo="Projeto pai (opcional)">
             <Selecao value={formProj.codProjPai} onChange={(e) => setFormProj({ ...formProj, codProjPai: e.target.value })}>
               <option value="">— nenhum (projeto raiz) —</option>
-              {projetos.map((p) => (
+              {projetos.filter((p) => p.codProj !== editProj?.codProj).map((p) => (
                 <option key={p.codProj} value={p.codProj}>{p.identificacao}</option>
               ))}
             </Selecao>
@@ -283,12 +309,12 @@ export default function PaginaProjetos() {
           </Campo>
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
-            {salvando ? "Criando..." : "Criar projeto"}
+            {salvando ? "Salvando..." : editProj ? "Salvar" : "Criar projeto"}
           </BotaoPrimario>
         </form>
       </Gaveta>
 
-      <Gaveta titulo="Novo contrato de serviço" aberta={gavetaContr} fechar={() => setGavetaContr(false)}>
+      <Gaveta titulo={editContr ? "Editar contrato de serviço" : "Novo contrato de serviço"} aberta={gavetaContr} fechar={() => setGavetaContr(false)}>
         <form onSubmit={salvarContrato} style={{ display: "grid", gap: 14 }}>
           <Campo rotulo="Descrição">
             <Entrada required value={formContr.descrContrato} onChange={(e) => setFormContr({ ...formContr, descrContrato: e.target.value })} />
@@ -326,7 +352,7 @@ export default function PaginaProjetos() {
           </div>
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
-            {salvando ? "Criando..." : "Criar contrato"}
+            {salvando ? "Salvando..." : editContr ? "Salvar" : "Criar contrato"}
           </BotaoPrimario>
         </form>
       </Gaveta>

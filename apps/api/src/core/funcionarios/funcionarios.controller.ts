@@ -81,6 +81,18 @@ export class FuncionariosController {
     );
   }
 
+  @Patch('cargos/:codCar')
+  @Permissoes('core.funcionarios.editar')
+  async editarCargo(@Req() req: ReqAut, @Param('codCar') codCar: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaCargo.partial(), corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const c = await tx.cargo.findFirst({ where: { codCar: BigInt(codCar), ativo: 'S' } });
+      if (!c) throw new NotFoundException('Cargo inexistente neste tenant');
+      await tx.cargo.update({ where: { codCar: c.codCar }, data: { ...dados, codUsuAlt: req.usuario.codUsu } });
+      return { ok: true };
+    });
+  }
+
   // ===== Departamentos (TFPDEP) =====
   @Get('departamentos')
   @Permissoes('core.funcionarios.ler')
@@ -106,6 +118,32 @@ export class FuncionariosController {
       return tx.departamento.create({
         data: { codTen: req.usuario.codTen, ...dados, grau, codUsuInc: req.usuario.codUsu },
       });
+    });
+  }
+
+  @Patch('departamentos/:codDep')
+  @Permissoes('core.funcionarios.editar')
+  async editarDepartamento(@Req() req: ReqAut, @Param('codDep') codDep: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaDepartamento.partial(), corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const dep = await tx.departamento.findFirst({ where: { codDep: BigInt(codDep), ativo: 'S' } });
+      if (!dep) throw new NotFoundException('Departamento inexistente neste tenant');
+      let grau = dep.grau;
+      if (dados.codDepPai !== undefined) {
+        if (dados.codDepPai && dados.codDepPai === dep.codDep) throw new BadRequestException('Departamento não pode ser pai de si mesmo');
+        if (dados.codDepPai) {
+          const pai = await tx.departamento.findFirst({ where: { codDep: dados.codDepPai, ativo: 'S' } });
+          if (!pai) throw new BadRequestException('Departamento pai inexistente');
+          grau = pai.grau + 1;
+        } else {
+          grau = 1;
+        }
+      }
+      await tx.departamento.update({
+        where: { codDep: dep.codDep },
+        data: { descrDep: dados.descrDep, codCencus: dados.codCencus, codDepPai: dados.codDepPai, grau, codUsuAlt: req.usuario.codUsu },
+      });
+      return { ok: true };
     });
   }
 
@@ -265,6 +303,53 @@ export class FuncionariosController {
     });
   }
 
+  @Patch('projetos/:codProj')
+  @Permissoes('core.funcionarios.editar')
+  async editarProjeto(@Req() req: ReqAut, @Param('codProj') codProj: string, @Body() corpo: unknown) {
+    const dados = validar(
+      z.object({
+        identificacao: z.string().min(2).optional(),
+        abreviatura: z.string().min(1).max(20).optional(),
+        codProjPai: z.coerce.bigint().nullish(),
+        codEmp: z.coerce.bigint().nullish(),
+        dtInicio: z.coerce.date().nullish(),
+        dtTermino: z.coerce.date().nullish(),
+        vlrOrcado: z.coerce.number().positive().nullish(),
+      }),
+      corpo,
+    );
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const proj = await tx.projeto.findFirst({ where: { codProj: BigInt(codProj), ativo: 'S' } });
+      if (!proj) throw new NotFoundException('Projeto inexistente neste tenant');
+      let grau = proj.grau;
+      if (dados.codProjPai !== undefined) {
+        if (dados.codProjPai && dados.codProjPai === proj.codProj) throw new BadRequestException('Projeto não pode ser pai de si mesmo');
+        if (dados.codProjPai) {
+          const pai = await tx.projeto.findFirst({ where: { codProj: dados.codProjPai, ativo: 'S' } });
+          if (!pai) throw new BadRequestException('Projeto pai inexistente');
+          grau = pai.grau + 1;
+        } else {
+          grau = 1;
+        }
+      }
+      await tx.projeto.update({
+        where: { codProj: proj.codProj },
+        data: {
+          identificacao: dados.identificacao,
+          abreviatura: dados.abreviatura,
+          codProjPai: dados.codProjPai,
+          codEmp: dados.codEmp,
+          dtInicio: dados.dtInicio,
+          dtTermino: dados.dtTermino,
+          vlrOrcado: dados.vlrOrcado,
+          grau,
+          codUsuAlt: req.usuario.codUsu,
+        },
+      });
+      return { ok: true };
+    });
+  }
+
   @Get('contratos-servico')
   @Permissoes('core.funcionarios.ler')
   listarContratos(@Req() req: ReqAut) {
@@ -297,6 +382,47 @@ export class FuncionariosController {
       return tx.contratoServico.create({
         data: { codTen: req.usuario.codTen, ...dados, codUsuInc: req.usuario.codUsu },
       });
+    });
+  }
+
+  @Patch('contratos-servico/:codContrato')
+  @Permissoes('core.funcionarios.editar')
+  async editarContrato(@Req() req: ReqAut, @Param('codContrato') codContrato: string, @Body() corpo: unknown) {
+    const dados = validar(
+      z.object({
+        descrContrato: z.string().min(2).optional(),
+        numContrato: z.string().nullish(),
+        codProj: z.coerce.bigint().nullish(),
+        codEmp: z.coerce.bigint().nullish(),
+        tipo: z.string().length(1).optional(),
+        vlrHora: z.coerce.number().positive().nullish(),
+        parcelaQtd: z.coerce.number().int().positive().nullish(),
+        dtTermino: z.coerce.date().nullish(),
+      }),
+      corpo,
+    );
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const c = await tx.contratoServico.findFirst({ where: { codContrato: BigInt(codContrato), ativo: 'S' } });
+      if (!c) throw new NotFoundException('Contrato inexistente neste tenant');
+      if (dados.codProj) {
+        const proj = await tx.projeto.findFirst({ where: { codProj: dados.codProj, ativo: 'S' } });
+        if (!proj) throw new BadRequestException('Projeto inexistente neste tenant');
+      }
+      await tx.contratoServico.update({
+        where: { codContrato: c.codContrato },
+        data: {
+          descrContrato: dados.descrContrato,
+          numContrato: dados.numContrato,
+          codProj: dados.codProj,
+          codEmp: dados.codEmp,
+          tipo: dados.tipo,
+          vlrHora: dados.vlrHora,
+          parcelaQtd: dados.parcelaQtd,
+          dtTermino: dados.dtTermino,
+          codUsuAlt: req.usuario.codUsu,
+        },
+      });
+      return { ok: true };
     });
   }
 

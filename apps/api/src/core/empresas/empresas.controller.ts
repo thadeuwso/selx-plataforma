@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
@@ -9,6 +9,13 @@ const esquemaNovaEmpresa = z.object({
   razaoSocial: z.string().min(2),
   cgc: z.string().optional(),
   codEmpMatriz: z.coerce.bigint().optional(),
+});
+
+const esquemaEditarEmpresa = z.object({
+  nomeFantasia: z.string().min(2).optional(),
+  razaoSocial: z.string().min(2).optional(),
+  cgc: z.string().nullish(),
+  situacao: z.enum(['ATIVA', 'INATIVA']).optional(),
 });
 
 type ReqAutenticada = Request & { usuario: UsuarioAutenticado };
@@ -70,6 +77,34 @@ export class EmpresasController {
         },
         select: { codEmp: true, nomeFantasia: true, razaoSocial: true, codEmpMatriz: true },
       });
+    });
+  }
+
+  /** Edita empresa/filial. */
+  @Patch(':codEmp')
+  @Permissoes('core.empresas.editar')
+  async editar(@Req() req: ReqAutenticada, @Param('codEmp') codEmp: string, @Body() corpo: unknown) {
+    let dados: z.infer<typeof esquemaEditarEmpresa>;
+    try {
+      dados = esquemaEditarEmpresa.parse(corpo);
+    } catch (erro) {
+      if (erro instanceof ZodError) throw new BadRequestException({ mensagem: 'Dados inválidos', detalhes: erro.issues });
+      throw erro;
+    }
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const emp = await tx.empresa.findFirst({ where: { codEmp: BigInt(codEmp), ativo: 'S' } });
+      if (!emp) throw new NotFoundException('Empresa inexistente neste tenant');
+      await tx.empresa.update({
+        where: { codEmp: emp.codEmp },
+        data: {
+          nomeFantasia: dados.nomeFantasia,
+          razaoSocial: dados.razaoSocial,
+          cgc: dados.cgc,
+          situacao: dados.situacao,
+          codUsuAlt: req.usuario.codUsu,
+        },
+      });
+      return { ok: true };
     });
   }
 }
