@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Abas, BotaoPrimario, Campo, Entrada, Gaveta, Selecao } from "./formulario";
 import { DesenvolvimentoTabs } from "@/componentes/desenvolvimento-tabs";
+import { DadosFuncionario } from "@/componentes/dados-funcionario";
 
 /**
  * Detalhe do funcionário — dá casa às três rotas que existiam no backend sem
@@ -48,11 +49,13 @@ const ROTULO_TIPO_MUD: Record<string, string> = {
 export function FuncionarioDrawer({
   funcionario,
   fechar,
+  aoAtualizar,
 }: {
   funcionario: { codFun: string; nomeFun: string; numCad: string } | null;
   fechar: () => void;
+  aoAtualizar?: () => void;
 }) {
-  const [tab, setTab] = useState("dependentes");
+  const [tab, setTab] = useState("dados");
   const [dependentes, setDependentes] = useState<Dependente[] | null>(null);
   const [historico, setHistorico] = useState<EventoHistorico[] | null>(null);
   const [assinaturas, setAssinaturas] = useState<AssinaturaFun[] | null>(null);
@@ -77,7 +80,7 @@ export function FuncionarioDrawer({
   }, [codFun]);
 
   useEffect(() => {
-    setTab("dependentes");
+    setTab("dados");
     setDependentes(null);
     setHistorico(null);
     setAssinaturas(null);
@@ -154,12 +157,23 @@ export function FuncionarioDrawer({
             ativa={tab}
             aoMudar={setTab}
             abas={[
+              { id: "dados", rotulo: "Dados" },
               { id: "dependentes", rotulo: "Dependentes" },
               { id: "historico", rotulo: "Histórico" },
               { id: "documentos", rotulo: "Documentos" },
               { id: "desenvolvimento", rotulo: "Desenvolvimento" },
             ]}
           />
+
+          {tab === "dados" && codFun && (
+            <DadosFuncionario
+              codFun={codFun}
+              aoSalvar={() => {
+                setHistorico(null);
+                aoAtualizar?.();
+              }}
+            />
+          )}
 
           {tab === "dependentes" && (
             <div style={{ display: "grid", gap: 16 }}>

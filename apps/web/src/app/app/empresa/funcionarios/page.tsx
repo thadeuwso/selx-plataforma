@@ -214,7 +214,7 @@ export default function PaginaFuncionarios() {
         </form>
       </Gaveta>
 
-      <FuncionarioDrawer funcionario={detalhe} fechar={() => setDetalhe(null)} />
+      <FuncionarioDrawer funcionario={detalhe} fechar={() => setDetalhe(null)} aoAtualizar={carregar} />
     </main>
   );
 }

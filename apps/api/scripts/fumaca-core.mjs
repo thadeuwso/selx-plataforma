@@ -1823,6 +1823,21 @@ const funPdi = await http("POST", "/funcionarios", {
 }, tokenA2);
 verificar("cria funcionário p/ teste de PDI (201)", funPdi.status === 201);
 
+// Edição de dados do funcionário (RN-CORE): GET detalhe + PATCH + histórico
+const funEdit = await http("POST", "/funcionarios", { codEmp: cadA.json?.codEmp, numCad: 7050, nomeFun: "Funcionário Edição", dtAdm: "2026-08-01", tipoContrato: "CLT" }, tokenA2);
+const detFun = await http("GET", `/funcionarios/${funEdit.json?.codFun}`, null, tokenA2);
+verificar("GET detalhe do funcionário traz campos editáveis", detFun.status === 200 && detFun.json?.nomeFun === "Funcionário Edição" && "tipoContrato" in (detFun.json ?? {}));
+const cargoEdit = await http("POST", "/cargos", { nomeCar: "Cargo Editado" }, tokenA2);
+const patchFun = await http("PATCH", `/funcionarios/${funEdit.json?.codFun}`, {
+  nomeFun: "Funcionário Renomeado", codCar: cargoEdit.json?.codCar, situacao: "AFASTADO",
+}, tokenA2);
+verificar("PATCH edita o funcionário e registra 2 eventos (cargo + situação)", patchFun.status === 200 && patchFun.json?.eventos === 2);
+const detFun2 = await http("GET", `/funcionarios/${funEdit.json?.codFun}`, null, tokenA2);
+verificar("edição persiste (nome, cargo e situação)", detFun2.json?.nomeFun === "Funcionário Renomeado" && String(detFun2.json?.codCar) === String(cargoEdit.json?.codCar) && detFun2.json?.situacao === "AFASTADO");
+const histFun = await http("GET", `/funcionarios/${funEdit.json?.codFun}/historico`, null, tokenA2);
+verificar("mudança de cargo virou evento no histórico (TFPFUNHIS)", histFun.json?.some((h) => h.tipoMud === "CARGO" && h.valorNovo === "Cargo Editado"));
+verificar("tenant B não edita funcionário do tenant A → 404", (await http("PATCH", `/funcionarios/${funEdit.json?.codFun}`, { nomeFun: "hack" }, tokenB)).status === 404);
+
 const pdi = await http("POST", "/gestao-pessoas/pdi", {
   codFun: funPdi.json?.codFun, titulo: "Integração e primeiros 90 dias",
   objetivo: "Autonomia na rotina do time até o fim do período de experiência",

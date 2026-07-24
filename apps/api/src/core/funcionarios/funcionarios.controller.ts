@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
@@ -6,6 +6,19 @@ import { PrismaService } from '../../compartilhado/prisma/prisma.service';
 import { FuncionariosService } from './funcionarios.service';
 
 const esquemaCargo = z.object({ nomeCar: z.string().min(2), cbo: z.string().optional() });
+
+/** Campos editáveis de um funcionário já admitido (todos opcionais). */
+const esquemaFuncionarioPatch = z.object({
+  nomeFun: z.string().min(2).optional(),
+  email: z.string().email().nullish(),
+  cgc: z.string().nullish(),
+  dtNasc: z.coerce.date().nullish(),
+  codCar: z.coerce.bigint().nullish(),
+  codDep: z.coerce.bigint().nullish(),
+  tipoContrato: z.string().min(1).optional(),
+  vlrSal: z.coerce.number().positive().nullish(),
+  situacao: z.enum(['ATIVO', 'AFASTADO', 'FERIAS', 'DESLIGADO']).optional(),
+});
 
 const esquemaDepartamento = z.object({
   descrDep: z.string().min(2),
@@ -127,6 +140,92 @@ export class FuncionariosController {
     return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
       this.funcionariosService.admitir(tx, req.usuario.codTen, req.usuario.codUsu, dados),
     );
+  }
+
+  /** Dados de um funcionário para edição. */
+  @Get('funcionarios/:codFun')
+  @Permissoes('core.funcionarios.ler')
+  async obterFuncionario(@Req() req: ReqAut, @Param('codFun') codFun: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const f = await tx.funcionario.findFirst({
+        where: { codFun: BigInt(codFun), ativo: 'S' },
+        select: {
+          codFun: true, numCad: true, nomeFun: true, email: true, cgc: true, dtNasc: true, dtAdm: true,
+          codCar: true, codDep: true, tipoContrato: true, vlrSal: true, situacao: true,
+          empresa: { select: { codEmp: true, nomeFantasia: true } },
+        },
+      });
+      if (!f) throw new NotFoundException('Funcionário inexistente neste tenant');
+      return f;
+    });
+  }
+
+  /**
+   * Edita os dados de um funcionário já admitido. Mudanças de cargo, departamento,
+   * situação ou salário viram evento de vida em TFPFUNHIS (o acompanhamento que o
+   * módulo valoriza) — quem estava aqui não desaparece do histórico.
+   */
+  @Patch('funcionarios/:codFun')
+  @Permissoes('core.funcionarios.editar')
+  async atualizarFuncionario(@Req() req: ReqAut, @Param('codFun') codFun: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaFuncionarioPatch, corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const atual = await tx.funcionario.findFirst({
+        where: { codFun: BigInt(codFun), ativo: 'S' },
+        include: { cargo: { select: { nomeCar: true } }, departamento: { select: { descrDep: true } } },
+      });
+      if (!atual) throw new NotFoundException('Funcionário inexistente neste tenant');
+
+      // Validações de vínculo (o tenant já é garantido pela RLS).
+      if (dados.codCar) {
+        const c = await tx.cargo.findFirst({ where: { codCar: dados.codCar, ativo: 'S' } });
+        if (!c) throw new BadRequestException('Cargo inexistente neste tenant');
+      }
+      if (dados.codDep) {
+        const d = await tx.departamento.findFirst({ where: { codDep: dados.codDep, ativo: 'S' } });
+        if (!d) throw new BadRequestException('Departamento inexistente neste tenant');
+      }
+
+      // Eventos de vida (TFPFUNHIS) para mudanças relevantes.
+      const eventos: { tipoMud: string; valorAnt: string | null; valorNovo: string | null }[] = [];
+      if (dados.codCar !== undefined && (dados.codCar ?? null)?.toString() !== (atual.codCar ?? null)?.toString()) {
+        const novo = dados.codCar ? await tx.cargo.findFirst({ where: { codCar: dados.codCar }, select: { nomeCar: true } }) : null;
+        eventos.push({ tipoMud: 'CARGO', valorAnt: atual.cargo?.nomeCar ?? null, valorNovo: novo?.nomeCar ?? null });
+      }
+      if (dados.codDep !== undefined && (dados.codDep ?? null)?.toString() !== (atual.codDep ?? null)?.toString()) {
+        const novo = dados.codDep ? await tx.departamento.findFirst({ where: { codDep: dados.codDep }, select: { descrDep: true } }) : null;
+        eventos.push({ tipoMud: 'DEPARTAMENTO', valorAnt: atual.departamento?.descrDep ?? null, valorNovo: novo?.descrDep ?? null });
+      }
+      if (dados.situacao !== undefined && dados.situacao !== atual.situacao) {
+        eventos.push({ tipoMud: 'SITUACAO', valorAnt: atual.situacao, valorNovo: dados.situacao });
+      }
+      if (dados.vlrSal !== undefined && dados.vlrSal !== null && dados.vlrSal.toString() !== (atual.vlrSal?.toString() ?? null)) {
+        eventos.push({ tipoMud: 'SALARIO', valorAnt: atual.vlrSal?.toString() ?? null, valorNovo: dados.vlrSal.toString() });
+      }
+
+      await tx.funcionario.update({
+        where: { codFun: atual.codFun },
+        data: {
+          nomeFun: dados.nomeFun,
+          email: dados.email,
+          cgc: dados.cgc,
+          dtNasc: dados.dtNasc,
+          codCar: dados.codCar,
+          codDep: dados.codDep,
+          tipoContrato: dados.tipoContrato,
+          vlrSal: dados.vlrSal,
+          situacao: dados.situacao,
+          codUsuAlt: req.usuario.codUsu,
+        },
+      });
+      const hoje = new Date();
+      for (const e of eventos) {
+        await tx.funcionarioHistorico.create({
+          data: { codTen: req.usuario.codTen, codFun: atual.codFun, ...e, dtMud: hoje, codUsuInc: req.usuario.codUsu },
+        });
+      }
+      return { ok: true, eventos: eventos.length };
+    });
   }
 
   // ===== Projetos (TCSPRJ) e Contratos de serviço (TCSCON) — espelhos mínimos =====
