@@ -8,8 +8,8 @@ Estado atual: **Fases 1–5 entregues.** 4 (Visão 360 + `ProximaAcao`, mig 0033
 5c reescopou o modelo 360 (empresa/departamento/colaboradores + cargo; migs 0036/0037/0038). Role-fit na tela "Competências do cargo". **Fase 6 entregue:** metas (`Meta`/`ProgressoMeta`, status derivado, resumo ponderado, trilha de progresso, aba Metas) + feedbacks (reuso na aba Feedbacks); mig 0041.
 Fase 7 = treinamentos/LMS (mig 0042). **Fase 8 entregue:** perfil comportamental (ponte só-leitura com o recrutamento + aviso metodológico) + potencial 9-box (`AvaliacaoPotencial`, `quadrante9box`, rascunho→revisão humana, campos de sucessão; mig 0043).
 **Fase 9 entregue:** IA de desempenho (resumo executivo + roteiro de feedback pelo gateway; purposes registrados; `IADesempenhoInsight`; cache por hash; auditada; schema tolerante + normalização; geração real verificada Ollama/OpenAI; mig 0044).
-**Fase 10 entregue:** riscos e alertas (motor de regras puro `avaliarRiscos` + `Alerta`/TGPALERTA guarda só a decisão humana por chave; seção na Visão 360; mig 0045).
-**Próxima: Fase 11 (exportação PDF server-side, auditoria de leitura, papéis/escopo — gestor pelo departamento).**
+Fase 10 = riscos e alertas (mig 0045). **Fase 11a entregue:** auditoria de leitura (VISUALIZACAO/IA no LogAuditoria com nomeTab=PAINEL360/codReg=codFun; endpoint + aba Auditoria).
+**Resta na Fase 11:** exportação (relatório do painel — sem dep de browser no api, só `pdf-parse` de leitura; opção: HTML server-rendered + print, ou lib) e papéis/escopo (gestor pelo departamento → precisa `Departamento.codFunGestor?`) + dashboard do gestor.
 
 ---
 
